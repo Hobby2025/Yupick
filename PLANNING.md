@@ -5,6 +5,13 @@
 **프로젝트명**: Yupick (Youtube Pick)
 **목적**: 유튜브 영상의 댓글을 분석하여 구독자 중 특정 조건에 맞는 참가자를 추첨하는 자동화 시스템
 **작성일**: 2025-12-08
+**구현 방식**: 전통적인 알고리즘 기반 (LLM/AI 불필요, 저비용 운영)
+
+### 핵심 특징
+- ✅ **LLM 불필요**: 전통적인 문자열 매칭 알고리즘만으로 구현
+- ✅ **저비용 운영**: 추가 API 비용 없음 (YouTube API만 사용)
+- ✅ **빠른 처리**: 복잡한 모델 추론 없이 즉시 처리
+- ✅ **투명한 로직**: 명확한 규칙 기반 필터링
 
 ---
 
@@ -60,7 +67,8 @@
 
 **오타 처리 전략**:
 
-사용자들의 다양한 오타와 표기 변형을 처리하기 위한 다층 필터링 시스템이 필요합니다.
+사용자들의 다양한 오타와 표기 변형을 처리하기 위한 다층 필터링 시스템입니다.
+**중요**: 모든 처리는 전통적인 문자열 알고리즘으로 구현 가능하며, LLM이나 AI 모델이 필요하지 않습니다.
 
 1. **텍스트 정규화 (1차 처리)**
    - 공백 제거: "에어 팟" → "에어팟"
@@ -376,14 +384,15 @@ filter_history:
 → [강제 제외] 클릭 → 추첨 대상에서 제외
 ```
 
-#### 2.4.6 학습 데이터 축적
+#### 2.4.6 패턴 분석 및 제안 시스템
 
-**피드백 루프**:
-- 관리자의 승인/거부 패턴을 분석
+**통계 기반 피드백 루프** (LLM 불필요):
+- 관리자의 승인/거부 빈도를 카운트 (단순 통계)
 - 자주 승인되는 오타 패턴을 동의어 사전에 자동 추가 제안
 - 자주 거부되는 패턴을 블랙리스트에 추가
+- **구현**: 간단한 빈도수 계산 및 임계값 비교
 
-**학습 데이터 활용**:
+**통계 데이터 활용**:
 ```
 예시:
 - "에어포드" → 10번 승인됨
@@ -494,6 +503,11 @@ GET    /api/events/:id/filter-stats
 - Node.js / Python (선택)
 - YouTube Data API v3
 - 데이터베이스: SQLite / PostgreSQL
+- **필터링 엔진**:
+  - 정규표현식 (내장)
+  - Levenshtein Distance 라이브러리 (예: `fuzzywuzzy`, `difflib`)
+  - 한글 처리: `hangul-js` (Node.js) 또는 `hgtk` (Python)
+  - **주의**: LLM/AI 모델 불필요, 추가 API 비용 없음
 
 **프론트엔드 (웹 인터페이스)**:
 - React / Vue.js
@@ -503,6 +517,7 @@ GET    /api/events/:id/filter-stats
 **배포**:
 - Docker 컨테이너화
 - 클라우드 호스팅 (AWS, GCP, Azure) 또는 로컬 실행
+- **비용**: YouTube API 할당량만 관리하면 됨 (무료 할당량 내 사용 가능)
 
 ### 3.2 시스템 구성도
 
@@ -767,6 +782,7 @@ GET    /api/events/:id/export     - 결과 내보내기
 
 ## 13. 향후 확장 가능성
 
+**기본 기능 확장**:
 - 다중 영상 동시 이벤트 지원
 - 자동 당첨자 알림 기능 (이메일, DM)
 - 이벤트 템플릿 기능
@@ -774,15 +790,30 @@ GET    /api/events/:id/export     - 결과 내보내기
 - 다른 플랫폼 지원 (트위치, 인스타그램 등)
 - 통계 대시보드 (참여율, 구독자 증가율 등)
 
+**고급 필터링 (선택적, 추가 비용 발생)**:
+- LLM 기반 문맥 이해 (부정적 의미 감지)
+- 의미 기반 매칭 (시맨틱 검색)
+- **주의**: 현재 기획안의 전통적 알고리즘만으로도 85-90% 이상의 정확도 달성 가능
+- LLM 도입은 예산과 필요성에 따라 추후 고려
+
 ---
 
 ## 14. 참고 자료
 
+**YouTube API**:
 - [YouTube Data API v3 Documentation](https://developers.google.com/youtube/v3)
 - [YouTube Data API - Comments](https://developers.google.com/youtube/v3/docs/comments)
 - [YouTube Data API - Subscriptions](https://developers.google.com/youtube/v3/docs/subscriptions)
-- Fisher-Yates Shuffle Algorithm
+
+**알고리즘 및 라이브러리**:
+- Fisher-Yates Shuffle Algorithm (공정한 랜덤 추첨)
 - 암호학적 난수 생성 (Crypto.getRandomValues, secrets module)
+- Levenshtein Distance (문자열 유사도)
+  - Python: `python-Levenshtein`, `fuzzywuzzy`, `difflib`
+  - Node.js: `fast-levenshtein`, `fuzzyset.js`, `string-similarity`
+- 한글 처리
+  - Node.js: `hangul-js`
+  - Python: `hgtk`, `jamo`
 
 ---
 
