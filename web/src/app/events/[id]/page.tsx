@@ -7,31 +7,76 @@ export default async function EventDetailPage(props: {
 }) {
   const { id } = props.params;
 
-  const event = await prisma.event.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      name: true,
-      videoUrl: true,
-      videoId: true,
-      lastCollectedAt: true,
-      createdAt: true,
-      updatedAt: true,
-      _count: { select: { comments: true } },
-      comments: {
-        orderBy: { createdAt: "desc" },
-        take: 20,
-        select: {
-          id: true,
-          commentId: true,
-          authorName: true,
-          text: true,
-          publishedAt: true,
-          createdAt: true,
+  let event: {
+    id: string;
+    name: string | null;
+    videoUrl: string;
+    videoId: string;
+    lastCollectedAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+    _count: { comments: number };
+    comments: Array<{
+      id: string;
+      commentId: string;
+      authorName: string | null;
+      text: string;
+      publishedAt: Date | null;
+      createdAt: Date;
+    }>;
+  } | null = null;
+
+  try {
+    event = await prisma.event.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        videoUrl: true,
+        videoId: true,
+        lastCollectedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: { select: { comments: true } },
+        comments: {
+          orderBy: { createdAt: "desc" },
+          take: 20,
+          select: {
+            id: true,
+            commentId: true,
+            authorName: true,
+            text: true,
+            publishedAt: true,
+            createdAt: true,
+          },
         },
       },
-    },
-  });
+    });
+  } catch (e) {
+    console.error("RSC /events/[id] prisma error", { id }, e);
+
+    return (
+      <div className="min-h-screen bg-zinc-50">
+        <main className="mx-auto w-full max-w-4xl px-6 py-12">
+          <div className="rounded-xl border border-zinc-200 bg-white p-6">
+            <div className="text-sm font-medium text-zinc-900">
+              이벤트 정보를 불러오지 못했습니다.
+            </div>
+            <div className="mt-2 text-sm text-zinc-600">
+              Vercel 로그에서 에러 원인을 확인해주세요. (DB 연결/환경변수/권한
+              문제일 수 있습니다.)
+            </div>
+            <a
+              className="mt-3 inline-block text-sm text-zinc-700 hover:text-zinc-900"
+              href="/events"
+            >
+              목록으로
+            </a>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   if (!event) {
     return (
