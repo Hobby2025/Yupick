@@ -7,6 +7,14 @@ export default function CollectComments(props: { eventId: string }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  type CollectSuccess = {
+    fetchedCount: number;
+    createdCount: number;
+    updatedCount: number;
+  };
+
+  type CollectError = { error: string };
+
   async function run() {
     setLoading(true);
     setMessage(null);
@@ -18,13 +26,15 @@ export default function CollectComments(props: { eventId: string }) {
         body: JSON.stringify({ maxPages }),
       });
 
-      const data = (await res.json()) as
-        | { fetchedCount: number; createdCount: number; updatedCount: number }
-        | { error: string };
+      const data = (await res.json()) as CollectSuccess | CollectError;
 
       if (!res.ok) {
         const err = "error" in data ? data.error : "Failed";
         throw new Error(err);
+      }
+
+      if ("error" in data) {
+        throw new Error(data.error);
       }
 
       setMessage(
