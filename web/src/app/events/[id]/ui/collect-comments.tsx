@@ -53,7 +53,7 @@ export default function CollectComments(props: { eventId: string }) {
   return (
     <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
       <input
-        className="h-10 w-full rounded-lg border border-zinc-200 px-3 text-sm outline-none focus:border-zinc-400 sm:w-28"
+        className="h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:border-zinc-400 sm:w-28"
         type="number"
         min={1}
         max={25}

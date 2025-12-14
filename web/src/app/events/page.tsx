@@ -92,13 +92,13 @@ export default function EventsPage() {
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <input
-              className="h-10 rounded-lg border border-zinc-200 px-3 text-sm outline-none focus:border-zinc-400"
+              className="h-10 rounded-lg border border-zinc-200 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:border-zinc-400"
               placeholder="이벤트 이름(선택)"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
             <input
-              className="h-10 rounded-lg border border-zinc-200 px-3 text-sm outline-none focus:border-zinc-400 sm:col-span-2"
+              className="h-10 rounded-lg border border-zinc-200 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:border-zinc-400 sm:col-span-2"
               placeholder="YouTube 영상 URL 또는 Video ID"
               value={videoUrl}
               onChange={(e) => setVideoUrl(e.target.value)}
