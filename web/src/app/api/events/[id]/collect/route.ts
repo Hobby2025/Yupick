@@ -43,56 +43,27 @@ export async function POST(
       maxPages,
     });
 
-    const results = await prisma.$transaction(
-      async (tx: Prisma.TransactionClient) => {
-        const created: string[] = [];
-        const updated: string[] = [];
+    const insertResult = await prisma.comment.createMany({
+      data: comments.map((c) => ({
+        eventId: id,
+        commentId: c.commentId,
+        authorName: c.authorName ?? null,
+        authorChannelId: c.authorChannelId ?? null,
+        text: c.text,
+        publishedAt: c.publishedAt ?? null,
+      })),
+      skipDuplicates: true,
+    });
 
-        for (const c of comments) {
-          const existing = await tx.comment.findUnique({
-            where: { commentId: c.commentId },
-            select: { id: true },
-          });
-
-          if (existing) {
-            await tx.comment.update({
-              where: { commentId: c.commentId },
-              data: {
-                eventId: id,
-                authorName: c.authorName ?? null,
-                authorChannelId: c.authorChannelId ?? null,
-                text: c.text,
-                publishedAt: c.publishedAt ?? null,
-              },
-            });
-            updated.push(c.commentId);
-          } else {
-            await tx.comment.create({
-              data: {
-                eventId: id,
-                commentId: c.commentId,
-                authorName: c.authorName ?? null,
-                authorChannelId: c.authorChannelId ?? null,
-                text: c.text,
-                publishedAt: c.publishedAt ?? null,
-              },
-            });
-            created.push(c.commentId);
-          }
-        }
-
-        await tx.event.update({
-          where: { id },
-          data: { lastCollectedAt: new Date() },
-        });
-
-        return { createdCount: created.length, updatedCount: updated.length };
-      }
-    );
+    await prisma.event.update({
+      where: { id },
+      data: { lastCollectedAt: new Date() },
+    });
 
     return NextResponse.json({
       fetchedCount: comments.length,
-      ...results,
+      createdCount: insertResult.count,
+      updatedCount: 0,
     });
   } catch (e) {
     console.error("POST /api/events/[id]/collect failed", { id }, e);
