@@ -70,11 +70,42 @@ export default function PrizesPanel(props: { eventId: string }) {
   const raceNextRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const raceStartRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const canCreatePrize = useMemo(
     () => newPrizeName.trim().length > 0,
     [newPrizeName]
   );
+
+  const drawTitleId = useMemo(() => {
+    return `draw-title-${drawPrizeId ?? "none"}`;
+  }, [drawPrizeId]);
+
+  const clearRaceTimers = useCallback(() => {
+    if (raceFinishRef.current) {
+      clearTimeout(raceFinishRef.current);
+      raceFinishRef.current = null;
+    }
+    if (raceNextRef.current) {
+      clearTimeout(raceNextRef.current);
+      raceNextRef.current = null;
+    }
+    if (raceStartRef.current) {
+      clearTimeout(raceStartRef.current);
+      raceStartRef.current = null;
+    }
+    if (revealTimerRef.current) {
+      clearTimeout(revealTimerRef.current);
+      revealTimerRef.current = null;
+    }
+  }, []);
+
+  const revealAll = useCallback(() => {
+    clearRaceTimers();
+    setRaceStarted(false);
+    setRevealCount(drawWinners.length);
+    setDrawPhase("done");
+  }, [clearRaceTimers, drawWinners.length]);
 
   const loadPrizes = useCallback(async () => {
     setLoading(true);
@@ -102,7 +133,8 @@ export default function PrizesPanel(props: { eventId: string }) {
     }
   }, [props.eventId]);
 
-  function closeDraw() {
+  const closeDraw = useCallback(() => {
+    clearRaceTimers();
     setDrawOpen(false);
     setDrawPrizeId(null);
     setDrawPrizeName("");
@@ -113,12 +145,13 @@ export default function PrizesPanel(props: { eventId: string }) {
     setRaceStarted(false);
     setRaceIndex(0);
     setRaceLanes([]);
-  }
+  }, [clearRaceTimers]);
 
   function buildRaceLanes(params: {
     prizeId: string;
     winnerLabel: string;
     laneCount: number;
+    winnersList: WinnerItem[];
   }) {
     const colors = [
       "bg-red-500",
@@ -135,7 +168,7 @@ export default function PrizesPanel(props: { eventId: string }) {
         ? poolFromCandidates
             .map((c) => c.authorName)
             .filter((x): x is string => !!x)
-        : drawWinners
+        : params.winnersList
             .map((w) => w.candidate.authorName)
             .filter((x): x is string => !!x);
 
@@ -165,8 +198,8 @@ export default function PrizesPanel(props: { eventId: string }) {
         ? params.winnerLabel
         : decoys.shift() ?? `참가자 ${i + 1}`;
       const durationMs = isWinner
-        ? 1700 + Math.floor(Math.random() * 250)
-        : 2200 + Math.floor(Math.random() * 1200);
+        ? 1200 + Math.floor(Math.random() * 200)
+        : 1600 + Math.floor(Math.random() * 1100);
 
       lanes.push({
         id: `${Date.now()}-${i}-${label}`,
@@ -187,10 +220,7 @@ export default function PrizesPanel(props: { eventId: string }) {
   }) {
     if (params.roundIndex >= params.winnersList.length) return;
 
-    if (raceFinishRef.current) clearTimeout(raceFinishRef.current);
-    if (raceNextRef.current) clearTimeout(raceNextRef.current);
-    if (raceStartRef.current) clearTimeout(raceStartRef.current);
-    if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+    clearRaceTimers();
 
     const winner = params.winnersList[params.roundIndex];
     const winnerLabel = winner?.candidate.authorName || "(이름 없음)";
@@ -201,6 +231,7 @@ export default function PrizesPanel(props: { eventId: string }) {
       prizeId: params.prizeId,
       winnerLabel,
       laneCount: 6,
+      winnersList: params.winnersList,
     });
     setRaceLanes(lanes);
     setDrawPhase("rolling");
@@ -209,7 +240,9 @@ export default function PrizesPanel(props: { eventId: string }) {
       setRaceStarted(true);
     }, 40);
 
-    const maxDuration = Math.max(...lanes.map((l) => l.durationMs));
+    const winnerDuration =
+      lanes.find((l) => l.isWinner)?.durationMs ??
+      Math.max(...lanes.map((l) => l.durationMs));
     raceFinishRef.current = setTimeout(() => {
       setRaceStarted(false);
       setRevealCount(params.roundIndex + 1);
@@ -229,7 +262,7 @@ export default function PrizesPanel(props: { eventId: string }) {
           winnersList: params.winnersList,
         });
       }, 650);
-    }, maxDuration + 120);
+    }, winnerDuration + 120);
   }
 
   async function startDrawGame(prize: PrizeItem) {
@@ -598,33 +631,31 @@ export default function PrizesPanel(props: { eventId: string }) {
 
   useEffect(() => {
     return () => {
-      if (raceFinishRef.current) clearTimeout(raceFinishRef.current);
-      if (raceNextRef.current) clearTimeout(raceNextRef.current);
-      if (raceStartRef.current) clearTimeout(raceStartRef.current);
-      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+      clearRaceTimers();
     };
-  }, []);
+  }, [clearRaceTimers]);
 
   useEffect(() => {
-    if (!drawOpen) {
-      if (raceFinishRef.current) {
-        clearTimeout(raceFinishRef.current);
-        raceFinishRef.current = null;
-      }
-      if (raceNextRef.current) {
-        clearTimeout(raceNextRef.current);
-        raceNextRef.current = null;
-      }
-      if (raceStartRef.current) {
-        clearTimeout(raceStartRef.current);
-        raceStartRef.current = null;
-      }
-      if (revealTimerRef.current) {
-        clearTimeout(revealTimerRef.current);
-        revealTimerRef.current = null;
-      }
-    }
+    if (!drawOpen) clearRaceTimers();
+  }, [drawOpen, clearRaceTimers]);
+
+  useEffect(() => {
+    if (!drawOpen) return;
+    closeButtonRef.current?.focus();
   }, [drawOpen]);
+
+  useEffect(() => {
+    if (!drawOpen) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      closeDraw();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [drawOpen, closeDraw]);
 
   useEffect(() => {
     void loadPrizes();
@@ -863,19 +894,32 @@ export default function PrizesPanel(props: { eventId: string }) {
       )}
 
       {drawOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+          onMouseDown={(e) => {
+            if (e.target !== e.currentTarget) return;
+            closeDraw();
+          }}
+        >
           <div
             key={drawPrizeId ?? "draw"}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={drawTitleId}
             className="w-full max-w-lg overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl"
           >
             <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4">
               <div className="min-w-0">
                 <div className="text-xs font-medium text-zinc-600">추첨</div>
-                <div className="truncate text-sm font-semibold text-zinc-900">
+                <div
+                  id={drawTitleId}
+                  className="truncate text-sm font-semibold text-zinc-900"
+                >
                   {drawPrizeName}
                 </div>
               </div>
               <button
+                ref={closeButtonRef}
                 className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-200 px-3 text-sm text-zinc-800 hover:bg-zinc-50"
                 onClick={() => closeDraw()}
               >
@@ -897,8 +941,16 @@ export default function PrizesPanel(props: { eventId: string }) {
                     <div className="text-sm font-medium text-zinc-900">
                       구슬 레이스
                     </div>
-                    <div className="text-xs text-zinc-600">
-                      ROUND {raceIndex + 1}/{Math.max(1, drawWinners.length)}
+                    <div className="flex items-center gap-3">
+                      <button
+                        className="inline-flex h-8 items-center justify-center rounded-lg border border-zinc-200 px-2 text-xs text-zinc-800 hover:bg-zinc-50"
+                        onClick={() => revealAll()}
+                      >
+                        스킵
+                      </button>
+                      <div className="text-xs text-zinc-600">
+                        ROUND {raceIndex + 1}/{Math.max(1, drawWinners.length)}
+                      </div>
                     </div>
                   </div>
 
@@ -920,10 +972,10 @@ export default function PrizesPanel(props: { eventId: string }) {
                           <div
                             className={`absolute left-1 top-1/2 h-6 w-6 -translate-y-1/2 rounded-full ${lane.color} shadow-sm`}
                             style={{
-                              transform: raceStarted
-                                ? "translateX(calc(100% - 2.25rem))"
-                                : "translateX(0px)",
-                              transitionProperty: "transform",
+                              left: raceStarted
+                                ? "calc(100% - 1.75rem)"
+                                : undefined,
+                              transitionProperty: "left",
                               transitionDuration: `${lane.durationMs}ms`,
                               transitionTimingFunction:
                                 "cubic-bezier(0.22, 1, 0.36, 1)",
@@ -961,28 +1013,10 @@ export default function PrizesPanel(props: { eventId: string }) {
                       <button
                         className="text-sm text-zinc-700 hover:text-zinc-900"
                         onClick={() => {
-                          if (raceFinishRef.current) {
-                            clearTimeout(raceFinishRef.current);
-                            raceFinishRef.current = null;
-                          }
-                          if (raceNextRef.current) {
-                            clearTimeout(raceNextRef.current);
-                            raceNextRef.current = null;
-                          }
-                          if (raceStartRef.current) {
-                            clearTimeout(raceStartRef.current);
-                            raceStartRef.current = null;
-                          }
-                          if (revealTimerRef.current) {
-                            clearTimeout(revealTimerRef.current);
-                            revealTimerRef.current = null;
-                          }
-                          setRaceStarted(false);
-                          setRevealCount(drawWinners.length);
-                          setDrawPhase("done");
+                          revealAll();
                         }}
                       >
-                        모두 공개
+                        스킵
                       </button>
                     ) : null}
                   </div>
