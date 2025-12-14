@@ -41,10 +41,10 @@ export default function PrizesPanel(props: { eventId: string }) {
   const [candidates, setCandidates] = useState<
     Record<string, CandidateItem[] | undefined>
   >({});
-  const [candidatesOpen, setCandidatesOpen] = useState<Record<string, boolean>>(
-    {}
-  );
-  const [moveTo, setMoveTo] = useState<Record<string, string>>({});
+  const [manageOpen, setManageOpen] = useState<Record<string, boolean>>({});
+  const [manageTab, setManageTab] = useState<
+    Record<string, "candidates" | "winners">
+  >({});
 
   const canCreatePrize = useMemo(
     () => newPrizeName.trim().length > 0,
@@ -104,6 +104,30 @@ export default function PrizesPanel(props: { eventId: string }) {
     }
   }
 
+  async function openManage(prizeId: string) {
+    const nextOpen = !manageOpen[prizeId];
+    setManageOpen((prev) => ({ ...prev, [prizeId]: nextOpen }));
+    if (!nextOpen) return;
+
+    const tab = manageTab[prizeId] ?? "candidates";
+    setManageTab((prev) => ({ ...prev, [prizeId]: tab }));
+
+    if (tab === "winners") {
+      await loadWinners(prizeId);
+    } else {
+      await loadCandidates(prizeId);
+    }
+  }
+
+  async function setTab(prizeId: string, tab: "candidates" | "winners") {
+    setManageTab((prev) => ({ ...prev, [prizeId]: tab }));
+    if (tab === "winners") {
+      await loadWinners(prizeId);
+    } else {
+      await loadCandidates(prizeId);
+    }
+  }
+
   async function clearCandidates(prizeId: string) {
     const ok = window.confirm("이 상품의 후보/당첨을 모두 초기화할까요?");
     if (!ok) return;
@@ -135,6 +159,12 @@ export default function PrizesPanel(props: { eventId: string }) {
         return { ...prev, [prizeId]: [] };
       });
 
+      if (
+        manageOpen[prizeId] &&
+        (manageTab[prizeId] ?? "candidates") === "candidates"
+      ) {
+        await loadCandidates(prizeId);
+      }
       await loadPrizes();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
@@ -199,7 +229,7 @@ export default function PrizesPanel(props: { eventId: string }) {
 
       await Promise.all([
         loadCandidates(fromPrizeId),
-        loadCandidates(toPrizeId),
+        manageOpen[toPrizeId] ? loadCandidates(toPrizeId) : Promise.resolve(),
       ]);
       await loadPrizes();
     } catch (e) {
@@ -231,6 +261,24 @@ export default function PrizesPanel(props: { eventId: string }) {
       }
 
       setWinners((prev) => {
+        const next = { ...prev };
+        delete next[prizeId];
+        return next;
+      });
+
+      setCandidates((prev) => {
+        const next = { ...prev };
+        delete next[prizeId];
+        return next;
+      });
+
+      setManageOpen((prev) => {
+        const next = { ...prev };
+        delete next[prizeId];
+        return next;
+      });
+
+      setManageTab((prev) => {
         const next = { ...prev };
         delete next[prizeId];
         return next;
@@ -299,7 +347,10 @@ export default function PrizesPanel(props: { eventId: string }) {
         throw new Error(msg);
       }
 
-      if (candidatesOpen[prizeId]) {
+      if (
+        manageOpen[prizeId] &&
+        (manageTab[prizeId] ?? "candidates") === "candidates"
+      ) {
         await loadCandidates(prizeId);
       }
       await loadPrizes();
@@ -361,6 +412,9 @@ export default function PrizesPanel(props: { eventId: string }) {
         ...prev,
         [prizeId]: data && "winners" in data ? data.winners : [],
       }));
+
+      setManageOpen((prev) => ({ ...prev, [prizeId]: true }));
+      setManageTab((prev) => ({ ...prev, [prizeId]: "winners" }));
       await loadPrizes();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
@@ -443,31 +497,6 @@ export default function PrizesPanel(props: { eventId: string }) {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
-                    className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-200 px-3 text-sm text-zinc-800 hover:bg-zinc-50"
-                    onClick={() => void buildCandidates(p.id)}
-                  >
-                    후보 리스트 만들기
-                  </button>
-                  <button
-                    className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-200 px-3 text-sm text-zinc-800 hover:bg-zinc-50"
-                    onClick={() => {
-                      const nextOpen = !candidatesOpen[p.id];
-                      setCandidatesOpen((prev) => ({
-                        ...prev,
-                        [p.id]: nextOpen,
-                      }));
-                      if (nextOpen) void loadCandidates(p.id);
-                    }}
-                  >
-                    {candidatesOpen[p.id] ? "후보 닫기" : "후보 보기"}
-                  </button>
-                  <button
-                    className="inline-flex h-9 items-center justify-center rounded-lg border border-red-200 px-3 text-sm text-red-700 hover:bg-red-50"
-                    onClick={() => void clearCandidates(p.id)}
-                  >
-                    후보 초기화
-                  </button>
-                  <button
                     className="inline-flex h-9 items-center justify-center rounded-lg bg-zinc-900 px-3 text-sm text-white hover:bg-zinc-800"
                     onClick={() => void draw(p.id)}
                   >
@@ -475,120 +504,159 @@ export default function PrizesPanel(props: { eventId: string }) {
                   </button>
                   <button
                     className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-200 px-3 text-sm text-zinc-800 hover:bg-zinc-50"
-                    onClick={() => void loadWinners(p.id)}
+                    onClick={() => void openManage(p.id)}
                   >
-                    당첨자 보기
-                  </button>
-                  <button
-                    className="inline-flex h-9 items-center justify-center rounded-lg border border-red-200 px-3 text-sm text-red-700 hover:bg-red-50"
-                    onClick={() => void deletePrize(p.id)}
-                  >
-                    상품 삭제
+                    {manageOpen[p.id] ? "관리 닫기" : "관리"}
                   </button>
                 </div>
               </div>
 
-              {candidatesOpen[p.id] ? (
+              {manageOpen[p.id] ? (
                 <div className="mt-3 rounded-lg border border-zinc-200 bg-white">
-                  <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2">
-                    <div className="text-xs font-medium text-zinc-700">
-                      후보자
+                  <div className="flex flex-col gap-2 border-b border-zinc-200 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-2">
+                      <button
+                        className={`inline-flex h-8 items-center justify-center rounded-lg border px-3 text-xs ${
+                          (manageTab[p.id] ?? "candidates") === "candidates"
+                            ? "border-zinc-300 bg-zinc-100 text-zinc-900"
+                            : "border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+                        }`}
+                        onClick={() => void setTab(p.id, "candidates")}
+                      >
+                        후보
+                      </button>
+                      <button
+                        className={`inline-flex h-8 items-center justify-center rounded-lg border px-3 text-xs ${
+                          (manageTab[p.id] ?? "candidates") === "winners"
+                            ? "border-zinc-300 bg-zinc-100 text-zinc-900"
+                            : "border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+                        }`}
+                        onClick={() => void setTab(p.id, "winners")}
+                      >
+                        당첨자
+                      </button>
                     </div>
-                    <button
-                      className="text-xs text-zinc-600 hover:text-zinc-900"
-                      onClick={() => void loadCandidates(p.id)}
-                    >
-                      새로고침
-                    </button>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {(manageTab[p.id] ?? "candidates") === "candidates" ? (
+                        <>
+                          <button
+                            className="inline-flex h-8 items-center justify-center rounded-lg border border-zinc-200 px-3 text-xs text-zinc-800 hover:bg-zinc-50"
+                            onClick={() => void buildCandidates(p.id)}
+                          >
+                            후보 재생성
+                          </button>
+                          <button
+                            className="inline-flex h-8 items-center justify-center rounded-lg border border-red-200 px-3 text-xs text-red-700 hover:bg-red-50"
+                            onClick={() => void clearCandidates(p.id)}
+                          >
+                            후보 초기화
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          className="inline-flex h-8 items-center justify-center rounded-lg border border-zinc-200 px-3 text-xs text-zinc-800 hover:bg-zinc-50"
+                          onClick={() => void loadWinners(p.id)}
+                        >
+                          새로고침
+                        </button>
+                      )}
+
+                      <button
+                        className="inline-flex h-8 items-center justify-center rounded-lg border border-red-200 px-3 text-xs text-red-700 hover:bg-red-50"
+                        onClick={() => void deletePrize(p.id)}
+                      >
+                        상품 삭제
+                      </button>
+                    </div>
                   </div>
 
-                  {!candidates[p.id] ? (
+                  {(manageTab[p.id] ?? "candidates") === "candidates" ? (
+                    !candidates[p.id] ? (
+                      <div className="px-3 py-3 text-sm text-zinc-600">
+                        불러오는 중...
+                      </div>
+                    ) : candidates[p.id]!.length === 0 ? (
+                      <div className="px-3 py-3 text-sm text-zinc-600">
+                        후보가 없습니다.
+                      </div>
+                    ) : (
+                      <ul className="divide-y divide-zinc-100">
+                        {candidates[p.id]!.map((c) => (
+                          <li
+                            key={c.id}
+                            className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div className="min-w-0">
+                              <div className="text-sm font-medium text-zinc-900">
+                                {c.authorName || "(이름 없음)"}
+                              </div>
+                              <div className="mt-0.5 text-xs text-zinc-600 break-all">
+                                {c.authorChannelId || ""}
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                              <select
+                                className="h-9 rounded-lg border border-zinc-200 bg-white px-2 text-sm text-zinc-900"
+                                value=""
+                                onChange={(e) => {
+                                  const toPrizeId = e.target.value;
+                                  if (!toPrizeId) return;
+                                  const ok = window.confirm(
+                                    `이 후보를 '${
+                                      prizes.find((x) => x.id === toPrizeId)
+                                        ?.name ?? ""
+                                    }'(으)로 이동할까요?`
+                                  );
+                                  if (!ok) return;
+                                  void moveCandidate(p.id, c.id, toPrizeId);
+                                }}
+                              >
+                                <option value="">다른 상품으로 이동</option>
+                                {prizes
+                                  .filter((pp) => pp.id !== p.id)
+                                  .map((pp) => (
+                                    <option key={pp.id} value={pp.id}>
+                                      {pp.name}
+                                    </option>
+                                  ))}
+                              </select>
+
+                              <button
+                                className="inline-flex h-9 items-center justify-center rounded-lg border border-red-200 px-3 text-sm text-red-700 hover:bg-red-50"
+                                onClick={() => void removeCandidate(p.id, c.id)}
+                              >
+                                제외
+                              </button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )
+                  ) : !winners[p.id] ? (
                     <div className="px-3 py-3 text-sm text-zinc-600">
                       불러오는 중...
                     </div>
-                  ) : candidates[p.id]!.length === 0 ? (
+                  ) : winners[p.id].length === 0 ? (
                     <div className="px-3 py-3 text-sm text-zinc-600">
-                      후보가 없습니다.
+                      당첨자가 없습니다.
                     </div>
                   ) : (
                     <ul className="divide-y divide-zinc-100">
-                      {candidates[p.id]!.map((c) => (
+                      {winners[p.id].map((w) => (
                         <li
-                          key={c.id}
-                          className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                          key={w.id}
+                          className="px-3 py-3 text-sm text-zinc-800"
                         >
-                          <div className="min-w-0">
-                            <div className="text-sm font-medium text-zinc-900">
-                              {c.authorName || "(이름 없음)"}
-                            </div>
-                            <div className="mt-0.5 text-xs text-zinc-600 break-all">
-                              {c.authorChannelId || ""}
-                            </div>
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-2">
-                            <select
-                              className="h-9 rounded-lg border border-zinc-200 bg-white px-2 text-sm text-zinc-900"
-                              value={moveTo[c.id] ?? ""}
-                              onChange={(e) =>
-                                setMoveTo((prev) => ({
-                                  ...prev,
-                                  [c.id]: e.target.value,
-                                }))
-                              }
-                            >
-                              <option value="">이동할 상품 선택</option>
-                              {prizes
-                                .filter((pp) => pp.id !== p.id)
-                                .map((pp) => (
-                                  <option key={pp.id} value={pp.id}>
-                                    {pp.name}
-                                  </option>
-                                ))}
-                            </select>
-
-                            <button
-                              className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-200 px-3 text-sm text-zinc-800 hover:bg-zinc-50"
-                              onClick={() =>
-                                void moveCandidate(
-                                  p.id,
-                                  c.id,
-                                  moveTo[c.id] ?? ""
-                                )
-                              }
-                            >
-                              이동
-                            </button>
-
-                            <button
-                              className="inline-flex h-9 items-center justify-center rounded-lg border border-red-200 px-3 text-sm text-red-700 hover:bg-red-50"
-                              onClick={() => void removeCandidate(p.id, c.id)}
-                            >
-                              제외
-                            </button>
-                          </div>
+                          {w.candidate.authorName || "(이름 없음)"}
+                          {w.candidate.authorChannelId
+                            ? ` / ${w.candidate.authorChannelId}`
+                            : ""}
                         </li>
                       ))}
                     </ul>
                   )}
-                </div>
-              ) : null}
-
-              {winners[p.id] && winners[p.id].length > 0 ? (
-                <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-                  <div className="mb-2 text-xs font-medium text-zinc-700">
-                    당첨자
-                  </div>
-                  <ul className="space-y-1">
-                    {winners[p.id].map((w) => (
-                      <li key={w.id} className="text-sm text-zinc-800">
-                        {w.candidate.authorName || "(이름 없음)"}
-                        {w.candidate.authorChannelId
-                          ? ` / ${w.candidate.authorChannelId}`
-                          : ""}
-                      </li>
-                    ))}
-                  </ul>
                 </div>
               ) : null}
             </li>
