@@ -18,6 +18,7 @@ export async function GET(
   const format = (
     req.nextUrl.searchParams.get("format") ?? "json"
   ).toLowerCase();
+  const type = (req.nextUrl.searchParams.get("type") ?? "users").toLowerCase();
 
   const where = q
     ? {
@@ -46,6 +47,42 @@ export async function GET(
   });
 
   if (format === "csv") {
+    if (type === "comments") {
+      const header = [
+        "commentId",
+        "authorName",
+        "authorChannelId",
+        "text",
+        "publishedAt",
+        "createdAt",
+      ].join(",");
+
+      const rows = comments
+        .map((c) => {
+          return [
+            csvEscape(c.commentId),
+            csvEscape(c.authorName),
+            csvEscape(c.authorChannelId),
+            csvEscape(c.text),
+            csvEscape(c.publishedAt ? c.publishedAt.toISOString() : ""),
+            csvEscape(c.createdAt.toISOString()),
+          ].join(",");
+        })
+        .join("\n");
+
+      const bom = "\ufeff";
+      const csv = `${bom}${header}\n${rows}\n`;
+
+      return new NextResponse(csv, {
+        status: 200,
+        headers: {
+          "content-type": "text/csv; charset=utf-8",
+          "content-disposition": `attachment; filename="event-${id}-comments.csv"`,
+          "cache-control": "no-store",
+        },
+      });
+    }
+
     const seen = new Set<string>();
     const users: Array<{ authorName: string; authorChannelId: string }> = [];
 

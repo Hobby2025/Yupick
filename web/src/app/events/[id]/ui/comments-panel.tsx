@@ -18,13 +18,25 @@ export default function CommentsPanel(props: { eventId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [comments, setComments] = useState<CommentItem[]>([]);
 
-  const csvHref = useMemo(() => {
+  const usersCsvHref = useMemo(() => {
     const url = new URL(
       `/api/events/${props.eventId}/comments`,
       window.location.origin
     );
     if (q.trim()) url.searchParams.set("q", q.trim());
     url.searchParams.set("format", "csv");
+    url.searchParams.set("type", "users");
+    return url.toString();
+  }, [props.eventId, q]);
+
+  const commentsCsvHref = useMemo(() => {
+    const url = new URL(
+      `/api/events/${props.eventId}/comments`,
+      window.location.origin
+    );
+    if (q.trim()) url.searchParams.set("q", q.trim());
+    url.searchParams.set("format", "csv");
+    url.searchParams.set("type", "comments");
     return url.toString();
   }, [props.eventId, q]);
 
@@ -89,9 +101,15 @@ export default function CommentsPanel(props: { eventId: string }) {
           />
           <a
             className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-200 px-4 text-sm text-zinc-800 hover:bg-zinc-50"
-            href={csvHref}
+            href={usersCsvHref}
           >
             유저 CSV 내보내기
+          </a>
+          <a
+            className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-200 px-4 text-sm text-zinc-800 hover:bg-zinc-50"
+            href={commentsCsvHref}
+          >
+            댓글 CSV 내보내기
           </a>
         </div>
       </div>
