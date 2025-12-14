@@ -28,133 +28,6 @@ type CandidateItem = {
   createdAt: string;
 };
 
-function ScratchOverlay(props: { disabled: boolean; onComplete: () => void }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const drawingRef = useRef(false);
-  const completedRef = useRef(false);
-
-  function drawLayer() {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const parent = canvas.parentElement;
-    if (!parent) return;
-
-    const rect = parent.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-
-    canvas.width = Math.max(1, Math.floor(rect.width * dpr));
-    canvas.height = Math.max(1, Math.floor(rect.height * dpr));
-    canvas.style.width = `${Math.floor(rect.width)}px`;
-    canvas.style.height = `${Math.floor(rect.height)}px`;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const w = rect.width;
-    const h = rect.height;
-
-    const grad = ctx.createLinearGradient(0, 0, w, h);
-    grad.addColorStop(0, "#e4e4e7");
-    grad.addColorStop(1, "#d4d4d8");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, w, h);
-
-    ctx.fillStyle = "rgba(24,24,27,0.55)";
-    ctx.font = "600 12px ui-sans-serif, system-ui";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("긁어서 확인", w / 2, h / 2);
-  }
-
-  function scratchAt(clientX: number, clientY: number) {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
-
-    ctx.globalCompositeOperation = "destination-out";
-    ctx.beginPath();
-    ctx.arc(x, y, 14, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalCompositeOperation = "source-over";
-  }
-
-  function estimateClearedRatio(): number {
-    const canvas = canvasRef.current;
-    if (!canvas) return 0;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) return 0;
-
-    const { width, height } = canvas;
-    const step = 12;
-    const img = ctx.getImageData(0, 0, width, height);
-    const data = img.data;
-
-    let cleared = 0;
-    let total = 0;
-
-    for (let y = 0; y < height; y += step) {
-      for (let x = 0; x < width; x += step) {
-        const idx = (y * width + x) * 4 + 3;
-        total += 1;
-        if (data[idx] === 0) cleared += 1;
-      }
-    }
-
-    return total === 0 ? 0 : cleared / total;
-  }
-
-  useEffect(() => {
-    if (props.disabled) return;
-    completedRef.current = false;
-    drawLayer();
-
-    const onResize = () => {
-      if (props.disabled) return;
-      if (completedRef.current) return;
-      drawLayer();
-    };
-
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [props.disabled]);
-
-  if (props.disabled) return null;
-
-  return (
-    <canvas
-      ref={canvasRef}
-      className="absolute inset-0 z-10 cursor-grab touch-none"
-      onPointerDown={(e) => {
-        drawingRef.current = true;
-        (e.currentTarget as HTMLCanvasElement).setPointerCapture(e.pointerId);
-        scratchAt(e.clientX, e.clientY);
-      }}
-      onPointerMove={(e) => {
-        if (!drawingRef.current) return;
-        scratchAt(e.clientX, e.clientY);
-        if (completedRef.current) return;
-        const ratio = estimateClearedRatio();
-        if (ratio >= 0.45) {
-          completedRef.current = true;
-          props.onComplete();
-        }
-      }}
-      onPointerUp={() => {
-        drawingRef.current = false;
-      }}
-      onPointerCancel={() => {
-        drawingRef.current = false;
-      }}
-    />
-  );
-}
-
 export default function PrizesPanel(props: { eventId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -181,12 +54,22 @@ export default function PrizesPanel(props: { eventId: string }) {
   >("idle");
   const [drawError, setDrawError] = useState<string | null>(null);
   const [drawWinners, setDrawWinners] = useState<WinnerItem[]>([]);
-  const [scratched, setScratched] = useState<Record<string, boolean>>({});
   const [revealCount, setRevealCount] = useState(0);
-  const [rollingLabel, setRollingLabel] = useState<string>("");
-  const rollingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const rollingStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const revealTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [raceStarted, setRaceStarted] = useState(false);
+  const [raceIndex, setRaceIndex] = useState(0);
+  const [raceLanes, setRaceLanes] = useState<
+    {
+      id: string;
+      label: string;
+      durationMs: number;
+      isWinner: boolean;
+      color: string;
+    }[]
+  >([]);
+  const raceFinishRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const raceNextRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const raceStartRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const canCreatePrize = useMemo(
     () => newPrizeName.trim().length > 0,
@@ -226,9 +109,127 @@ export default function PrizesPanel(props: { eventId: string }) {
     setDrawPhase("idle");
     setDrawError(null);
     setDrawWinners([]);
-    setScratched({});
     setRevealCount(0);
-    setRollingLabel("");
+    setRaceStarted(false);
+    setRaceIndex(0);
+    setRaceLanes([]);
+  }
+
+  function buildRaceLanes(params: {
+    prizeId: string;
+    winnerLabel: string;
+    laneCount: number;
+  }) {
+    const colors = [
+      "bg-red-500",
+      "bg-amber-500",
+      "bg-emerald-500",
+      "bg-sky-500",
+      "bg-indigo-500",
+      "bg-fuchsia-500",
+    ];
+
+    const poolFromCandidates = candidates[params.prizeId] ?? [];
+    const pool =
+      poolFromCandidates.length > 0
+        ? poolFromCandidates
+            .map((c) => c.authorName)
+            .filter((x): x is string => !!x)
+        : drawWinners
+            .map((w) => w.candidate.authorName)
+            .filter((x): x is string => !!x);
+
+    const uniq = Array.from(new Set(pool)).filter(
+      (x) => x !== params.winnerLabel
+    );
+    const laneCount = Math.max(3, Math.min(params.laneCount, 6));
+
+    const decoys: string[] = [];
+    for (let i = 0; i < laneCount - 1; i += 1) {
+      const picked = uniq[Math.floor(Math.random() * uniq.length)];
+      decoys.push(picked ?? `참가자 ${i + 1}`);
+    }
+
+    const winnerPos = Math.floor(Math.random() * laneCount);
+    const lanes: {
+      id: string;
+      label: string;
+      durationMs: number;
+      isWinner: boolean;
+      color: string;
+    }[] = [];
+
+    for (let i = 0; i < laneCount; i += 1) {
+      const isWinner = i === winnerPos;
+      const label = isWinner
+        ? params.winnerLabel
+        : decoys.shift() ?? `참가자 ${i + 1}`;
+      const durationMs = isWinner
+        ? 1700 + Math.floor(Math.random() * 250)
+        : 2200 + Math.floor(Math.random() * 1200);
+
+      lanes.push({
+        id: `${Date.now()}-${i}-${label}`,
+        label,
+        durationMs,
+        isWinner,
+        color: colors[i % colors.length]!,
+      });
+    }
+
+    return lanes;
+  }
+
+  function beginRaceRound(params: {
+    prizeId: string;
+    roundIndex: number;
+    winnersList: WinnerItem[];
+  }) {
+    if (params.roundIndex >= params.winnersList.length) return;
+
+    if (raceFinishRef.current) clearTimeout(raceFinishRef.current);
+    if (raceNextRef.current) clearTimeout(raceNextRef.current);
+    if (raceStartRef.current) clearTimeout(raceStartRef.current);
+    if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+
+    const winner = params.winnersList[params.roundIndex];
+    const winnerLabel = winner?.candidate.authorName || "(이름 없음)";
+
+    setRaceStarted(false);
+    setRaceIndex(params.roundIndex);
+    const lanes = buildRaceLanes({
+      prizeId: params.prizeId,
+      winnerLabel,
+      laneCount: 6,
+    });
+    setRaceLanes(lanes);
+    setDrawPhase("rolling");
+
+    raceStartRef.current = setTimeout(() => {
+      setRaceStarted(true);
+    }, 40);
+
+    const maxDuration = Math.max(...lanes.map((l) => l.durationMs));
+    raceFinishRef.current = setTimeout(() => {
+      setRaceStarted(false);
+      setRevealCount(params.roundIndex + 1);
+      setDrawPhase("reveal");
+
+      if (params.roundIndex + 1 >= params.winnersList.length) {
+        revealTimerRef.current = setTimeout(() => {
+          setDrawPhase("done");
+        }, 250);
+        return;
+      }
+
+      raceNextRef.current = setTimeout(() => {
+        beginRaceRound({
+          prizeId: params.prizeId,
+          roundIndex: params.roundIndex + 1,
+          winnersList: params.winnersList,
+        });
+      }, 650);
+    }, maxDuration + 120);
   }
 
   async function startDrawGame(prize: PrizeItem) {
@@ -239,9 +240,10 @@ export default function PrizesPanel(props: { eventId: string }) {
     setDrawPrizeName(prize.name);
     setDrawPhase("loading");
     setDrawWinners([]);
-    setScratched({});
     setRevealCount(0);
-    setRollingLabel("");
+    setRaceStarted(false);
+    setRaceIndex(0);
+    setRaceLanes([]);
 
     try {
       const res = await fetch(
@@ -270,53 +272,11 @@ export default function PrizesPanel(props: { eventId: string }) {
       setManageOpen((prev) => ({ ...prev, [prize.id]: true }));
       setManageTab((prev) => ({ ...prev, [prize.id]: "winners" }));
 
-      setDrawPhase("rolling");
-
-      const poolFromCandidates = candidates[prize.id] ?? [];
-      const pool =
-        poolFromCandidates.length > 0
-          ? poolFromCandidates.map((c) => c.authorName || "(이름 없음)")
-          : winnersList.map((w) => w.candidate.authorName || "(이름 없음)");
-      const safePool = pool.length > 0 ? pool : ["(후보 없음)"];
-
-      setRollingLabel(safePool[0] ?? "(후보 없음)");
-      rollingTimerRef.current = setInterval(() => {
-        const idx = Math.floor(Math.random() * safePool.length);
-        setRollingLabel(safePool[idx] ?? "(후보 없음)");
-      }, 90);
-
-      rollingStopRef.current = setTimeout(() => {
-        if (rollingTimerRef.current) {
-          clearInterval(rollingTimerRef.current);
-          rollingTimerRef.current = null;
-        }
-
-        setRollingLabel("");
-        setDrawPhase("reveal");
-
-        const total = winnersList.length;
-        if (total === 0) {
-          setRevealCount(0);
-          setDrawPhase("done");
-          return;
-        }
-
-        setRevealCount(0);
-        revealTimerRef.current = setInterval(() => {
-          setRevealCount((prev) => {
-            const next = prev + 1;
-            if (next >= total) {
-              if (revealTimerRef.current) {
-                clearInterval(revealTimerRef.current);
-                revealTimerRef.current = null;
-              }
-              setDrawPhase("done");
-              return total;
-            }
-            return next;
-          });
-        }, 900);
-      }, 1700);
+      if (winnersList.length === 0) {
+        setDrawPhase("done");
+      } else {
+        beginRaceRound({ prizeId: prize.id, roundIndex: 0, winnersList });
+      }
 
       await loadPrizes();
     } catch (e) {
@@ -638,25 +598,30 @@ export default function PrizesPanel(props: { eventId: string }) {
 
   useEffect(() => {
     return () => {
-      if (rollingTimerRef.current) clearInterval(rollingTimerRef.current);
-      if (revealTimerRef.current) clearInterval(revealTimerRef.current);
-      if (rollingStopRef.current) clearTimeout(rollingStopRef.current);
+      if (raceFinishRef.current) clearTimeout(raceFinishRef.current);
+      if (raceNextRef.current) clearTimeout(raceNextRef.current);
+      if (raceStartRef.current) clearTimeout(raceStartRef.current);
+      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
     };
   }, []);
 
   useEffect(() => {
     if (!drawOpen) {
-      if (rollingTimerRef.current) {
-        clearInterval(rollingTimerRef.current);
-        rollingTimerRef.current = null;
+      if (raceFinishRef.current) {
+        clearTimeout(raceFinishRef.current);
+        raceFinishRef.current = null;
+      }
+      if (raceNextRef.current) {
+        clearTimeout(raceNextRef.current);
+        raceNextRef.current = null;
+      }
+      if (raceStartRef.current) {
+        clearTimeout(raceStartRef.current);
+        raceStartRef.current = null;
       }
       if (revealTimerRef.current) {
-        clearInterval(revealTimerRef.current);
+        clearTimeout(revealTimerRef.current);
         revealTimerRef.current = null;
-      }
-      if (rollingStopRef.current) {
-        clearTimeout(rollingStopRef.current);
-        rollingStopRef.current = null;
       }
     }
   }, [drawOpen]);
@@ -793,14 +758,7 @@ export default function PrizesPanel(props: { eventId: string }) {
                             후보 초기화
                           </button>
                         </>
-                      ) : (
-                        <button
-                          className="inline-flex h-8 items-center justify-center rounded-lg border border-zinc-200 px-3 text-xs text-zinc-800 hover:bg-zinc-50"
-                          onClick={() => void loadWinners(p.id)}
-                        >
-                          새로고침
-                        </button>
-                      )}
+                      ) : null}
 
                       <button
                         className="inline-flex h-8 items-center justify-center rounded-lg border border-red-200 px-3 text-xs text-red-700 hover:bg-red-50"
@@ -932,20 +890,53 @@ export default function PrizesPanel(props: { eventId: string }) {
                 </div>
               ) : drawPhase === "rolling" ? (
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2 text-sm text-zinc-800">
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900" />
-                    섞는 중...
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-medium text-zinc-900">
+                      구슬 레이스
+                    </div>
+                    <div className="text-xs text-zinc-600">
+                      ROUND {raceIndex + 1}/{Math.max(1, drawWinners.length)}
+                    </div>
                   </div>
-                  <div className="rounded-2xl border border-zinc-200 bg-gradient-to-br from-zinc-50 to-white p-5">
-                    <div className="text-xs font-medium text-zinc-600">
-                      후보
+
+                  <div className="space-y-2 rounded-2xl border border-zinc-200 bg-gradient-to-br from-zinc-50 to-white p-4">
+                    <div className="flex items-center justify-between text-xs text-zinc-600">
+                      <div>START</div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-3 w-0.5 bg-zinc-300" />
+                        <div>FINISH</div>
+                      </div>
                     </div>
-                    <div className="mt-2 truncate text-2xl font-bold text-zinc-900">
-                      {rollingLabel || ""}
+                    <div className="space-y-2">
+                      {raceLanes.map((lane, idx) => (
+                        <div
+                          key={lane.id}
+                          className="relative h-8 rounded-full border border-zinc-200 bg-white"
+                        >
+                          <div className="absolute right-4 top-1/2 h-5 w-0.5 -translate-y-1/2 bg-zinc-300" />
+                          <div
+                            className={`absolute left-1 top-1/2 h-6 w-6 -translate-y-1/2 rounded-full ${lane.color} shadow-sm`}
+                            style={{
+                              transform: raceStarted
+                                ? "translateX(calc(100% - 2.25rem))"
+                                : "translateX(0px)",
+                              transitionProperty: "transform",
+                              transitionDuration: `${lane.durationMs}ms`,
+                              transitionTimingFunction:
+                                "cubic-bezier(0.22, 1, 0.36, 1)",
+                            }}
+                            title={lane.label}
+                          />
+                          <div className="absolute left-10 right-10 top-1/2 -translate-y-1/2 truncate text-xs text-zinc-700">
+                            {idx + 1}. {lane.label}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <div className="mt-3 text-xs text-zinc-500">
-                      잠시만요... 결과를 공개합니다
-                    </div>
+                  </div>
+
+                  <div className="text-xs text-zinc-500">
+                    먼저 도착한 구슬이 당첨!
                   </div>
                 </div>
               ) : drawPhase === "error" ? (
@@ -967,16 +958,24 @@ export default function PrizesPanel(props: { eventId: string }) {
                       <button
                         className="text-sm text-zinc-700 hover:text-zinc-900"
                         onClick={() => {
+                          if (raceFinishRef.current) {
+                            clearTimeout(raceFinishRef.current);
+                            raceFinishRef.current = null;
+                          }
+                          if (raceNextRef.current) {
+                            clearTimeout(raceNextRef.current);
+                            raceNextRef.current = null;
+                          }
+                          if (raceStartRef.current) {
+                            clearTimeout(raceStartRef.current);
+                            raceStartRef.current = null;
+                          }
                           if (revealTimerRef.current) {
-                            clearInterval(revealTimerRef.current);
+                            clearTimeout(revealTimerRef.current);
                             revealTimerRef.current = null;
                           }
+                          setRaceStarted(false);
                           setRevealCount(drawWinners.length);
-                          setScratched(
-                            Object.fromEntries(
-                              drawWinners.map((w) => [w.id, true])
-                            )
-                          );
                           setDrawPhase("done");
                         }}
                       >
@@ -994,44 +993,24 @@ export default function PrizesPanel(props: { eventId: string }) {
                       {drawWinners.slice(0, revealCount).map((w, idx) => (
                         <li
                           key={w.id}
-                          className="relative overflow-hidden rounded-xl border border-zinc-200 bg-white"
+                          className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-4 py-3"
                         >
-                          <div className="flex items-center justify-between px-4 py-3">
-                            <div className="min-w-0">
-                              <div className="text-xs font-medium text-zinc-600">
-                                WIN #{idx + 1}
-                              </div>
-                              <div
-                                className={`truncate text-sm font-semibold text-zinc-900 ${
-                                  scratched[w.id] ? "" : "blur-sm select-none"
-                                }`}
-                              >
-                                {w.candidate.authorName || "(이름 없음)"}
-                              </div>
-                              {w.candidate.authorChannelId ? (
-                                <div
-                                  className={`truncate text-xs text-zinc-500 ${
-                                    scratched[w.id] ? "" : "blur-sm select-none"
-                                  }`}
-                                >
-                                  {w.candidate.authorChannelId}
-                                </div>
-                              ) : null}
+                          <div className="min-w-0">
+                            <div className="text-xs font-medium text-zinc-600">
+                              WIN #{idx + 1}
                             </div>
-                            <div className="text-xs font-medium text-zinc-700">
-                              당첨
+                            <div className="truncate text-sm font-semibold text-zinc-900">
+                              {w.candidate.authorName || "(이름 없음)"}
                             </div>
+                            {w.candidate.authorChannelId ? (
+                              <div className="truncate text-xs text-zinc-500">
+                                {w.candidate.authorChannelId}
+                              </div>
+                            ) : null}
                           </div>
-
-                          <ScratchOverlay
-                            disabled={!!scratched[w.id]}
-                            onComplete={() =>
-                              setScratched((prev) => ({
-                                ...prev,
-                                [w.id]: true,
-                              }))
-                            }
-                          />
+                          <div className="text-xs font-medium text-zinc-700">
+                            당첨
+                          </div>
                         </li>
                       ))}
                     </ul>
