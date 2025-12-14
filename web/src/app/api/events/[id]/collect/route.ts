@@ -1,11 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { fetchTopLevelComments } from "@/lib/youtube";
 import type { Prisma } from "@prisma/client";
 
-export async function POST(req: Request, ctx: { params: { id: string } }) {
-  const { id } = ctx.params;
+export async function POST(
+  req: NextRequest,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  const { id } = await ctx.params;
 
   const apiKey = process.env.YOUTUBE_API_KEY;
   if (!apiKey) {
