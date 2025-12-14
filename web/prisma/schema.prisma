@@ -17,6 +17,7 @@ model Event {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   comments        Comment[]
+  prizes          Prize[]
 }
 
 model Comment {
@@ -31,4 +32,47 @@ model Comment {
   createdAt       DateTime @default(now())
 
   @@index([eventId])
+}
+
+model Prize {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name      String
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  candidates PrizeCandidate[]
+  winners    PrizeWinner[]
+
+  @@index([eventId])
+}
+
+model PrizeCandidate {
+  id              String   @id @default(cuid())
+  prizeId         String
+  prize           Prize    @relation(fields: [prizeId], references: [id], onDelete: Cascade)
+  userKey         String
+  authorName      String?
+  authorChannelId String?
+  createdAt       DateTime @default(now())
+
+  winners PrizeWinner[]
+
+  @@unique([prizeId, userKey])
+  @@index([prizeId])
+}
+
+model PrizeWinner {
+  id          String         @id @default(cuid())
+  prizeId     String
+  prize       Prize          @relation(fields: [prizeId], references: [id], onDelete: Cascade)
+  candidateId String
+  candidate   PrizeCandidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  createdAt   DateTime       @default(now())
+
+  @@unique([prizeId, candidateId])
+  @@index([prizeId])
+  @@index([candidateId])
 }

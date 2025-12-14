@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import CollectComments from "./ui/collect-comments";
 import CommentsPanel from "./ui/comments-panel";
 import DeleteEventButton from "./ui/delete-event";
+import PrizesPanel from "./ui/prizes-panel";
 
 export default async function EventDetailPage(props: {
   params: Promise<{ id: string }>;
@@ -117,6 +118,8 @@ export default async function EventDetailPage(props: {
             <CollectComments eventId={event.id} />
           </div>
         </section>
+
+        <PrizesPanel eventId={event.id} />
 
         <CommentsPanel eventId={event.id} />
       </main>
