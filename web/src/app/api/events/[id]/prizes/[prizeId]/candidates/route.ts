@@ -61,9 +61,16 @@ export async function POST(
 
   const body = (await req.json().catch(() => null)) as {
     q?: string;
+    replace?: boolean;
   } | null;
 
   const q = (body?.q ?? "").trim();
+  const replace = body?.replace !== false;
+
+  if (replace) {
+    await prisma.prizeWinner.deleteMany({ where: { prizeId } });
+    await prisma.prizeCandidate.deleteMany({ where: { prizeId } });
+  }
 
   const where = q
     ? {
@@ -115,6 +122,32 @@ export async function POST(
 
   return NextResponse.json(
     { createdCount: insert.count, totalCandidates: total },
+    { status: 200 }
+  );
+}
+
+// 후보/당첨 초기화(상품 단위)
+export async function DELETE(
+  _req: NextRequest,
+  ctx: { params: Promise<{ id: string; prizeId: string }> }
+) {
+  const { id: eventId, prizeId } = await ctx.params;
+
+  const prize = await prisma.prize.findFirst({
+    where: { id: prizeId, eventId },
+    select: { id: true },
+  });
+
+  if (!prize) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  await prisma.prizeWinner.deleteMany({ where: { prizeId } });
+  const deleted = await prisma.prizeCandidate.deleteMany({
+    where: { prizeId },
+  });
+  return NextResponse.json(
+    { ok: true, deletedCandidates: deleted.count },
     { status: 200 }
   );
 }

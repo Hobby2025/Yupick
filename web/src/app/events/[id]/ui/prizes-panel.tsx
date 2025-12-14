@@ -62,6 +62,74 @@ export default function PrizesPanel(props: { eventId: string }) {
     }
   }
 
+  async function clearCandidates(prizeId: string) {
+    const ok = window.confirm("이 상품의 후보/당첨을 모두 초기화할까요?");
+    if (!ok) return;
+
+    setError(null);
+
+    try {
+      const res = await fetch(
+        `/api/events/${props.eventId}/prizes/${prizeId}/candidates`,
+        { method: "DELETE" }
+      );
+      const data = (await res.json().catch(() => null)) as
+        | { ok: true; deletedCandidates: number }
+        | { error: string }
+        | null;
+
+      if (!res.ok) {
+        const msg = data && "error" in data ? data.error : "Failed";
+        throw new Error(msg);
+      }
+
+      setWinners((prev) => {
+        const next = { ...prev };
+        delete next[prizeId];
+        return next;
+      });
+
+      await loadPrizes();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unknown error");
+    }
+  }
+
+  async function deletePrize(prizeId: string) {
+    const ok = window.confirm(
+      "이 상품을 삭제할까요? (후보/당첨 결과도 함께 삭제됩니다)"
+    );
+    if (!ok) return;
+
+    setError(null);
+
+    try {
+      const res = await fetch(
+        `/api/events/${props.eventId}/prizes/${prizeId}`,
+        { method: "DELETE" }
+      );
+      const data = (await res.json().catch(() => null)) as
+        | { ok: true }
+        | { error: string }
+        | null;
+
+      if (!res.ok) {
+        const msg = data && "error" in data ? data.error : "Failed";
+        throw new Error(msg);
+      }
+
+      setWinners((prev) => {
+        const next = { ...prev };
+        delete next[prizeId];
+        return next;
+      });
+
+      await loadPrizes();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unknown error");
+    }
+  }
+
   async function createPrize() {
     if (!canCreatePrize) return;
 
@@ -103,7 +171,10 @@ export default function PrizesPanel(props: { eventId: string }) {
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ q: candidateQ.trim() || undefined }),
+          body: JSON.stringify({
+            q: candidateQ.trim() || undefined,
+            replace: true,
+          }),
         }
       );
       const data = (await res.json().catch(() => null)) as
@@ -263,6 +334,12 @@ export default function PrizesPanel(props: { eventId: string }) {
                     후보 리스트 만들기
                   </button>
                   <button
+                    className="inline-flex h-9 items-center justify-center rounded-lg border border-red-200 px-3 text-sm text-red-700 hover:bg-red-50"
+                    onClick={() => void clearCandidates(p.id)}
+                  >
+                    후보 초기화
+                  </button>
+                  <button
                     className="inline-flex h-9 items-center justify-center rounded-lg bg-zinc-900 px-3 text-sm text-white hover:bg-zinc-800"
                     onClick={() => void draw(p.id)}
                   >
@@ -273,6 +350,12 @@ export default function PrizesPanel(props: { eventId: string }) {
                     onClick={() => void loadWinners(p.id)}
                   >
                     당첨자 보기
+                  </button>
+                  <button
+                    className="inline-flex h-9 items-center justify-center rounded-lg border border-red-200 px-3 text-sm text-red-700 hover:bg-red-50"
+                    onClick={() => void deletePrize(p.id)}
+                  >
+                    상품 삭제
                   </button>
                 </div>
               </div>

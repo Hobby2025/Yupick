@@ -18,6 +18,16 @@ export default function CommentsPanel(props: { eventId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [comments, setComments] = useState<CommentItem[]>([]);
 
+  const identifiable = useMemo(() => {
+    return comments.filter((c) => (c.authorChannelId ?? "").trim().length > 0);
+  }, [comments]);
+
+  const unidentifiable = useMemo(() => {
+    return comments.filter(
+      (c) => (c.authorChannelId ?? "").trim().length === 0
+    );
+  }, [comments]);
+
   const usersCsvHref = useMemo(() => {
     const url = new URL(
       `/api/events/${props.eventId}/comments`,
@@ -123,28 +133,70 @@ export default function CommentsPanel(props: { eventId: string }) {
       ) : comments.length === 0 ? (
         <div className="px-6 py-6 text-sm text-zinc-600">댓글이 없습니다.</div>
       ) : (
-        <ul className="divide-y divide-zinc-100">
-          {comments.map((c) => (
-            <li key={c.id} className="px-6 py-4">
-              <div className="flex flex-col gap-1">
-                <div className="text-sm font-medium text-zinc-900">
-                  {c.authorName || "(알 수 없음)"}
-                </div>
-                <div className="text-xs text-zinc-500">
-                  commentId: {c.commentId}
-                </div>
-                <div className="mt-1 whitespace-pre-wrap text-sm text-zinc-800">
-                  {c.text}
-                </div>
-                <div className="mt-2 text-xs text-zinc-500">
-                  {c.publishedAt
-                    ? new Date(c.publishedAt).toLocaleString()
-                    : ""}
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <div>
+          <div className="border-b border-zinc-200 px-6 py-3 text-xs font-medium text-zinc-700">
+            식별 가능(authorChannelId 있음): {identifiable.length}개
+          </div>
+          {identifiable.length === 0 ? (
+            <div className="px-6 py-6 text-sm text-zinc-600">없음</div>
+          ) : (
+            <ul className="divide-y divide-zinc-100">
+              {identifiable.map((c) => (
+                <li key={c.id} className="px-6 py-4">
+                  <div className="flex flex-col gap-1">
+                    <div className="text-sm font-medium text-zinc-900">
+                      {c.authorName || "(알 수 없음)"}
+                    </div>
+                    <div className="text-xs text-zinc-500">
+                      channelId: {c.authorChannelId}
+                    </div>
+                    <div className="text-xs text-zinc-500">
+                      commentId: {c.commentId}
+                    </div>
+                    <div className="mt-1 whitespace-pre-wrap text-sm text-zinc-800">
+                      {c.text}
+                    </div>
+                    <div className="mt-2 text-xs text-zinc-500">
+                      {c.publishedAt
+                        ? new Date(c.publishedAt).toLocaleString()
+                        : ""}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="mt-2 border-b border-zinc-200 px-6 py-3 text-xs font-medium text-zinc-700">
+            식별 불가(authorChannelId 없음): {unidentifiable.length}개
+          </div>
+          {unidentifiable.length === 0 ? (
+            <div className="px-6 py-6 text-sm text-zinc-600">없음</div>
+          ) : (
+            <ul className="divide-y divide-zinc-100">
+              {unidentifiable.map((c) => (
+                <li key={c.id} className="px-6 py-4">
+                  <div className="flex flex-col gap-1">
+                    <div className="text-sm font-medium text-zinc-900">
+                      {c.authorName || "(알 수 없음)"}
+                    </div>
+                    <div className="text-xs text-zinc-500">
+                      commentId: {c.commentId}
+                    </div>
+                    <div className="mt-1 whitespace-pre-wrap text-sm text-zinc-800">
+                      {c.text}
+                    </div>
+                    <div className="mt-2 text-xs text-zinc-500">
+                      {c.publishedAt
+                        ? new Date(c.publishedAt).toLocaleString()
+                        : ""}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </section>
   );
