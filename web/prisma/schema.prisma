@@ -1,0 +1,34 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Event {
+  id              String    @id @default(cuid())
+  name            String?
+  videoUrl        String
+  videoId         String
+  lastCollectedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  comments        Comment[]
+}
+
+model Comment {
+  id              String   @id @default(cuid())
+  eventId         String
+  event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  commentId       String   @unique
+  authorName      String?
+  authorChannelId String?
+  text            String
+  publishedAt     DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([eventId])
+}
