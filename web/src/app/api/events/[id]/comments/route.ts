@@ -46,25 +46,27 @@ export async function GET(
   });
 
   if (format === "csv") {
-    const header = [
-      "commentId",
-      "authorName",
-      "authorChannelId",
-      "text",
-      "publishedAt",
-      "createdAt",
-    ].join(",");
+    const seen = new Set<string>();
+    const users: Array<{ authorName: string; authorChannelId: string }> = [];
 
-    const rows = comments
-      .map((c) => {
-        return [
-          csvEscape(c.commentId),
-          csvEscape(c.authorName),
-          csvEscape(c.authorChannelId),
-          csvEscape(c.text),
-          csvEscape(c.publishedAt ? c.publishedAt.toISOString() : ""),
-          csvEscape(c.createdAt.toISOString()),
-        ].join(",");
+    for (const c of comments) {
+      const authorName = c.authorName ?? "";
+      const authorChannelId = c.authorChannelId ?? "";
+      if (!authorName && !authorChannelId) continue;
+
+      const key = `${authorName}::${authorChannelId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      users.push({ authorName, authorChannelId });
+    }
+
+    const header = ["authorName", "authorChannelId"].join(",");
+
+    const rows = users
+      .map((u) => {
+        return [csvEscape(u.authorName), csvEscape(u.authorChannelId)].join(
+          ","
+        );
       })
       .join("\n");
 
@@ -75,7 +77,7 @@ export async function GET(
       status: 200,
       headers: {
         "content-type": "text/csv; charset=utf-8",
-        "content-disposition": `attachment; filename="event-${id}-comments.csv"`,
+        "content-disposition": `attachment; filename="event-${id}-users.csv"`,
         "cache-control": "no-store",
       },
     });

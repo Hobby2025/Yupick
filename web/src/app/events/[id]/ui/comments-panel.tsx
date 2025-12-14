@@ -91,7 +91,7 @@ export default function CommentsPanel(props: { eventId: string }) {
             className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-200 px-4 text-sm text-zinc-800 hover:bg-zinc-50"
             href={csvHref}
           >
-            CSV 내보내기
+            유저 CSV 내보내기
           </a>
         </div>
       </div>
