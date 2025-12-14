@@ -41,3 +41,22 @@ export async function GET(
 
   return NextResponse.json({ event });
 }
+
+export async function DELETE(
+  _req: NextRequest,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  const { id } = await ctx.params;
+
+  const existing = await prisma.event.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+
+  if (!existing) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  await prisma.event.delete({ where: { id } });
+  return NextResponse.json({ ok: true });
+}

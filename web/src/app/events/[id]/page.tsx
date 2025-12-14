@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma";
 
 import CollectComments from "./ui/collect-comments";
+import DeleteEventButton from "./ui/delete-event";
 
 export default async function EventDetailPage(props: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const { id } = props.params;
+  const { id } = await props.params;
 
   let event: {
     id: string;
@@ -113,12 +114,15 @@ export default async function EventDetailPage(props: {
               {event.videoUrl}
             </div>
           </div>
-          <a
-            className="text-sm text-zinc-700 hover:text-zinc-900"
-            href="/events"
-          >
-            목록
-          </a>
+          <div className="flex items-center gap-3">
+            <DeleteEventButton eventId={event.id} />
+            <a
+              className="text-sm text-zinc-700 hover:text-zinc-900"
+              href="/events"
+            >
+              목록
+            </a>
+          </div>
         </div>
 
         <section className="rounded-xl border border-zinc-200 bg-white p-6">

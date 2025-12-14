@@ -46,6 +46,32 @@ export default function EventsPage() {
     }
   }
 
+  async function deleteEvent(id: string) {
+    const ok = window.confirm(
+      "이 이벤트를 삭제할까요? (저장된 댓글도 함께 삭제됩니다)"
+    );
+    if (!ok) return;
+
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/events/${id}`, { method: "DELETE" });
+      const data = (await res.json().catch(() => null)) as
+        | { ok: true }
+        | { error: string }
+        | null;
+
+      if (!res.ok) {
+        const msg = data && "error" in data ? data.error : "Failed to delete";
+        throw new Error(msg);
+      }
+
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unknown error");
+    }
+  }
+
   async function createEvent() {
     if (!canCreate) return;
 
@@ -158,12 +184,20 @@ export default function EventsPage() {
                         {ev.videoUrl}
                       </div>
                     </div>
-                    <a
-                      className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-200 px-3 text-sm text-zinc-800 hover:bg-zinc-50"
-                      href={`/events/${ev.id}`}
-                    >
-                      상세
-                    </a>
+                    <div className="flex items-center gap-2">
+                      <a
+                        className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-200 px-3 text-sm text-zinc-800 hover:bg-zinc-50"
+                        href={`/events/${ev.id}`}
+                      >
+                        상세
+                      </a>
+                      <button
+                        className="inline-flex h-9 items-center justify-center rounded-lg border border-red-200 px-3 text-sm text-red-700 hover:bg-red-50"
+                        onClick={() => void deleteEvent(ev.id)}
+                      >
+                        삭제
+                      </button>
+                    </div>
                   </div>
                 </li>
               ))}
