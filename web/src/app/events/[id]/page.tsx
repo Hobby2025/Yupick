@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 
 import CollectComments from "./ui/collect-comments";
+import CommentsPanel from "./ui/comments-panel";
 import DeleteEventButton from "./ui/delete-event";
 
 export default async function EventDetailPage(props: {
@@ -17,14 +18,6 @@ export default async function EventDetailPage(props: {
     createdAt: Date;
     updatedAt: Date;
     _count: { comments: number };
-    comments: Array<{
-      id: string;
-      commentId: string;
-      authorName: string | null;
-      text: string;
-      publishedAt: Date | null;
-      createdAt: Date;
-    }>;
   } | null = null;
 
   try {
@@ -39,18 +32,6 @@ export default async function EventDetailPage(props: {
         createdAt: true,
         updatedAt: true,
         _count: { select: { comments: true } },
-        comments: {
-          orderBy: { createdAt: "desc" },
-          take: 20,
-          select: {
-            id: true,
-            commentId: true,
-            authorName: true,
-            text: true,
-            publishedAt: true,
-            createdAt: true,
-          },
-        },
       },
     });
   } catch (e) {
@@ -137,41 +118,7 @@ export default async function EventDetailPage(props: {
           </div>
         </section>
 
-        <section className="rounded-xl border border-zinc-200 bg-white">
-          <div className="border-b border-zinc-200 px-6 py-4">
-            <div className="text-sm font-medium text-zinc-900">
-              최근 댓글 20개
-            </div>
-          </div>
-
-          {event.comments.length === 0 ? (
-            <div className="px-6 py-6 text-sm text-zinc-600">
-              저장된 댓글이 없습니다.
-            </div>
-          ) : (
-            <ul className="divide-y divide-zinc-100">
-              {event.comments.map((c) => (
-                <li key={c.id} className="px-6 py-4">
-                  <div className="text-sm text-zinc-900">
-                    {c.authorName ? (
-                      <span className="font-medium">{c.authorName}</span>
-                    ) : (
-                      <span className="font-medium">(알 수 없음)</span>
-                    )}
-                  </div>
-                  <div className="mt-1 text-sm text-zinc-700 whitespace-pre-wrap">
-                    {c.text}
-                  </div>
-                  <div className="mt-2 text-xs text-zinc-500">
-                    {c.publishedAt
-                      ? new Date(c.publishedAt).toLocaleString()
-                      : ""}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <CommentsPanel eventId={event.id} />
       </main>
     </div>
   );

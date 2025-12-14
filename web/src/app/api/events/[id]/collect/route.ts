@@ -2,7 +2,6 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { fetchTopLevelComments } from "@/lib/youtube";
-import type { Prisma } from "@prisma/client";
 
 export async function POST(
   req: NextRequest,
