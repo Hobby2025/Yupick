@@ -20,6 +20,14 @@ type WinnerItem = {
   };
 };
 
+type CandidateItem = {
+  id: string;
+  userKey: string;
+  authorName: string | null;
+  authorChannelId: string | null;
+  createdAt: string;
+};
+
 export default function PrizesPanel(props: { eventId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +38,13 @@ export default function PrizesPanel(props: { eventId: string }) {
 
   const [candidateQ, setCandidateQ] = useState("");
   const [winners, setWinners] = useState<Record<string, WinnerItem[]>>({});
+  const [candidates, setCandidates] = useState<
+    Record<string, CandidateItem[] | undefined>
+  >({});
+  const [candidatesOpen, setCandidatesOpen] = useState<Record<string, boolean>>(
+    {}
+  );
+  const [moveTo, setMoveTo] = useState<Record<string, string>>({});
 
   const canCreatePrize = useMemo(
     () => newPrizeName.trim().length > 0,
@@ -62,6 +77,33 @@ export default function PrizesPanel(props: { eventId: string }) {
     }
   }
 
+  async function loadCandidates(prizeId: string) {
+    setError(null);
+
+    try {
+      const res = await fetch(
+        `/api/events/${props.eventId}/prizes/${prizeId}/candidates`,
+        { cache: "no-store" }
+      );
+      const data = (await res.json().catch(() => null)) as
+        | { candidates: CandidateItem[] }
+        | { error: string }
+        | null;
+
+      if (!res.ok) {
+        const msg = data && "error" in data ? data.error : "Failed";
+        throw new Error(msg);
+      }
+
+      setCandidates((prev) => ({
+        ...prev,
+        [prizeId]: data && "candidates" in data ? data.candidates : [],
+      }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unknown error");
+    }
+  }
+
   async function clearCandidates(prizeId: string) {
     const ok = window.confirm("이 상품의 후보/당첨을 모두 초기화할까요?");
     if (!ok) return;
@@ -89,6 +131,76 @@ export default function PrizesPanel(props: { eventId: string }) {
         return next;
       });
 
+      setCandidates((prev) => {
+        return { ...prev, [prizeId]: [] };
+      });
+
+      await loadPrizes();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unknown error");
+    }
+  }
+
+  async function removeCandidate(prizeId: string, candidateId: string) {
+    const ok = window.confirm("이 후보를 제외할까요?");
+    if (!ok) return;
+
+    setError(null);
+
+    try {
+      const res = await fetch(
+        `/api/events/${props.eventId}/prizes/${prizeId}/candidates/${candidateId}`,
+        { method: "DELETE" }
+      );
+      const data = (await res.json().catch(() => null)) as
+        | { ok: true }
+        | { error: string }
+        | null;
+
+      if (!res.ok) {
+        const msg = data && "error" in data ? data.error : "Failed";
+        throw new Error(msg);
+      }
+
+      await loadCandidates(prizeId);
+      await loadPrizes();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unknown error");
+    }
+  }
+
+  async function moveCandidate(
+    fromPrizeId: string,
+    candidateId: string,
+    toPrizeId: string
+  ) {
+    if (!toPrizeId) return;
+
+    setError(null);
+
+    try {
+      const res = await fetch(
+        `/api/events/${props.eventId}/prizes/${fromPrizeId}/candidates/${candidateId}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ toPrizeId }),
+        }
+      );
+      const data = (await res.json().catch(() => null)) as
+        | { ok: true }
+        | { error: string }
+        | null;
+
+      if (!res.ok) {
+        const msg = data && "error" in data ? data.error : "Failed";
+        throw new Error(msg);
+      }
+
+      await Promise.all([
+        loadCandidates(fromPrizeId),
+        loadCandidates(toPrizeId),
+      ]);
       await loadPrizes();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
@@ -187,6 +299,9 @@ export default function PrizesPanel(props: { eventId: string }) {
         throw new Error(msg);
       }
 
+      if (candidatesOpen[prizeId]) {
+        await loadCandidates(prizeId);
+      }
       await loadPrizes();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
@@ -334,6 +449,19 @@ export default function PrizesPanel(props: { eventId: string }) {
                     후보 리스트 만들기
                   </button>
                   <button
+                    className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-200 px-3 text-sm text-zinc-800 hover:bg-zinc-50"
+                    onClick={() => {
+                      const nextOpen = !candidatesOpen[p.id];
+                      setCandidatesOpen((prev) => ({
+                        ...prev,
+                        [p.id]: nextOpen,
+                      }));
+                      if (nextOpen) void loadCandidates(p.id);
+                    }}
+                  >
+                    {candidatesOpen[p.id] ? "후보 닫기" : "후보 보기"}
+                  </button>
+                  <button
                     className="inline-flex h-9 items-center justify-center rounded-lg border border-red-200 px-3 text-sm text-red-700 hover:bg-red-50"
                     onClick={() => void clearCandidates(p.id)}
                   >
@@ -359,6 +487,92 @@ export default function PrizesPanel(props: { eventId: string }) {
                   </button>
                 </div>
               </div>
+
+              {candidatesOpen[p.id] ? (
+                <div className="mt-3 rounded-lg border border-zinc-200 bg-white">
+                  <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2">
+                    <div className="text-xs font-medium text-zinc-700">
+                      후보자
+                    </div>
+                    <button
+                      className="text-xs text-zinc-600 hover:text-zinc-900"
+                      onClick={() => void loadCandidates(p.id)}
+                    >
+                      새로고침
+                    </button>
+                  </div>
+
+                  {!candidates[p.id] ? (
+                    <div className="px-3 py-3 text-sm text-zinc-600">
+                      불러오는 중...
+                    </div>
+                  ) : candidates[p.id]!.length === 0 ? (
+                    <div className="px-3 py-3 text-sm text-zinc-600">
+                      후보가 없습니다.
+                    </div>
+                  ) : (
+                    <ul className="divide-y divide-zinc-100">
+                      {candidates[p.id]!.map((c) => (
+                        <li
+                          key={c.id}
+                          className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-zinc-900">
+                              {c.authorName || "(이름 없음)"}
+                            </div>
+                            <div className="mt-0.5 text-xs text-zinc-600 break-all">
+                              {c.authorChannelId || ""}
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <select
+                              className="h-9 rounded-lg border border-zinc-200 bg-white px-2 text-sm text-zinc-900"
+                              value={moveTo[c.id] ?? ""}
+                              onChange={(e) =>
+                                setMoveTo((prev) => ({
+                                  ...prev,
+                                  [c.id]: e.target.value,
+                                }))
+                              }
+                            >
+                              <option value="">이동할 상품 선택</option>
+                              {prizes
+                                .filter((pp) => pp.id !== p.id)
+                                .map((pp) => (
+                                  <option key={pp.id} value={pp.id}>
+                                    {pp.name}
+                                  </option>
+                                ))}
+                            </select>
+
+                            <button
+                              className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-200 px-3 text-sm text-zinc-800 hover:bg-zinc-50"
+                              onClick={() =>
+                                void moveCandidate(
+                                  p.id,
+                                  c.id,
+                                  moveTo[c.id] ?? ""
+                                )
+                              }
+                            >
+                              이동
+                            </button>
+
+                            <button
+                              className="inline-flex h-9 items-center justify-center rounded-lg border border-red-200 px-3 text-sm text-red-700 hover:bg-red-50"
+                              onClick={() => void removeCandidate(p.id, c.id)}
+                            >
+                              제외
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ) : null}
 
               {winners[p.id] && winners[p.id].length > 0 ? (
                 <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
