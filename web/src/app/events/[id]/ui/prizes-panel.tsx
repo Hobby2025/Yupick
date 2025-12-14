@@ -31,6 +31,11 @@ type CandidateItem = {
 export default function PrizesPanel(props: { eventId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{
+    tone: "success" | "warning";
+    message: string;
+  } | null>(null);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
   const [prizes, setPrizes] = useState<PrizeItem[]>([]);
 
   const [newPrizeName, setNewPrizeName] = useState("");
@@ -376,6 +381,8 @@ export default function PrizesPanel(props: { eventId: string }) {
     if (!ok) return;
 
     setError(null);
+    setNotice(null);
+    setBusyKey(`clearCandidates:${prizeId}`);
 
     try {
       const res = await fetch(
@@ -409,8 +416,16 @@ export default function PrizesPanel(props: { eventId: string }) {
         await loadCandidates(prizeId);
       }
       await loadPrizes();
+      const deleted =
+        data && "deletedCandidates" in data ? data.deletedCandidates : 0;
+      setNotice({
+        tone: "success",
+        message: `후보를 초기화했습니다. (${deleted}명 삭제)`,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setBusyKey(null);
     }
   }
 
@@ -419,6 +434,8 @@ export default function PrizesPanel(props: { eventId: string }) {
     if (!ok) return;
 
     setError(null);
+    setNotice(null);
+    setBusyKey(`removeCandidate:${candidateId}`);
 
     try {
       const res = await fetch(
@@ -437,8 +454,11 @@ export default function PrizesPanel(props: { eventId: string }) {
 
       await loadCandidates(prizeId);
       await loadPrizes();
+      setNotice({ tone: "success", message: "후보를 제외했습니다." });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setBusyKey(null);
     }
   }
 
@@ -450,6 +470,8 @@ export default function PrizesPanel(props: { eventId: string }) {
     if (!toPrizeId) return;
 
     setError(null);
+    setNotice(null);
+    setBusyKey(`moveCandidate:${candidateId}`);
 
     try {
       const res = await fetch(
@@ -475,8 +497,11 @@ export default function PrizesPanel(props: { eventId: string }) {
         manageOpen[toPrizeId] ? loadCandidates(toPrizeId) : Promise.resolve(),
       ]);
       await loadPrizes();
+      setNotice({ tone: "success", message: "후보를 이동했습니다." });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setBusyKey(null);
     }
   }
 
@@ -487,6 +512,8 @@ export default function PrizesPanel(props: { eventId: string }) {
     if (!ok) return;
 
     setError(null);
+    setNotice(null);
+    setBusyKey(`deletePrize:${prizeId}`);
 
     try {
       const res = await fetch(
@@ -528,15 +555,22 @@ export default function PrizesPanel(props: { eventId: string }) {
       });
 
       await loadPrizes();
+      setNotice({ tone: "success", message: "상품을 삭제했습니다." });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setBusyKey(null);
     }
   }
 
   async function createPrize() {
     if (!canCreatePrize) return;
 
+    const label = newPrizeName.trim();
+    const qty = newPrizeQty;
     setError(null);
+    setNotice(null);
+    setBusyKey("createPrize");
 
     try {
       const res = await fetch(`/api/events/${props.eventId}/prizes`, {
@@ -559,14 +593,22 @@ export default function PrizesPanel(props: { eventId: string }) {
 
       setNewPrizeName("");
       setNewPrizeQty(1);
+      setNotice({
+        tone: "success",
+        message: `${label} (수량 ${qty}) 상품을 추가했습니다.`,
+      });
       await loadPrizes();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setBusyKey(null);
     }
   }
 
   async function buildCandidates(prizeId: string) {
     setError(null);
+    setNotice(null);
+    setBusyKey(`buildCandidates:${prizeId}`);
 
     try {
       const res = await fetch(
@@ -597,8 +639,18 @@ export default function PrizesPanel(props: { eventId: string }) {
         await loadCandidates(prizeId);
       }
       await loadPrizes();
+
+      const created = data && "createdCount" in data ? data.createdCount : 0;
+      const total =
+        data && "totalCandidates" in data ? data.totalCandidates : 0;
+      setNotice({
+        tone: "success",
+        message: `후보를 생성했습니다. (+${created}, 총 ${total})`,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setBusyKey(null);
     }
   }
 
@@ -671,6 +723,18 @@ export default function PrizesPanel(props: { eventId: string }) {
         <div className="px-6 py-4 text-sm text-red-600">{error}</div>
       ) : null}
 
+      {notice ? (
+        <div
+          className={`mx-6 mt-4 rounded-xl border px-4 py-3 text-sm ${
+            notice.tone === "warning"
+              ? "border-amber-200 bg-amber-50 text-amber-900"
+              : "border-emerald-200 bg-emerald-50 text-emerald-900"
+          }`}
+        >
+          {notice.message}
+        </div>
+      ) : null}
+
       <div className="px-6 py-4">
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
           <input
@@ -678,20 +742,35 @@ export default function PrizesPanel(props: { eventId: string }) {
             placeholder="상품명(예: 에어팟)"
             value={newPrizeName}
             onChange={(e) => setNewPrizeName(e.target.value)}
+            disabled={busyKey === "createPrize"}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              e.preventDefault();
+              void createPrize();
+            }}
           />
           <input
             className="h-10 rounded-lg border border-zinc-200 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:border-zinc-400"
             type="number"
             min={1}
             value={newPrizeQty}
-            onChange={(e) => setNewPrizeQty(Number(e.target.value))}
+            onChange={(e) => {
+              const next = Number(e.target.value);
+              setNewPrizeQty(Number.isFinite(next) && next > 0 ? next : 1);
+            }}
+            disabled={busyKey === "createPrize"}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              e.preventDefault();
+              void createPrize();
+            }}
           />
           <button
             className="inline-flex h-10 items-center justify-center rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-300"
-            disabled={!canCreatePrize}
+            disabled={!canCreatePrize || busyKey === "createPrize"}
             onClick={() => void createPrize()}
           >
-            상품 추가
+            {busyKey === "createPrize" ? "추가 중..." : "상품 추가"}
           </button>
         </div>
 
@@ -705,8 +784,9 @@ export default function PrizesPanel(props: { eventId: string }) {
           <button
             className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-200 px-4 text-sm text-zinc-800 hover:bg-zinc-50"
             onClick={() => void loadPrizes()}
+            disabled={loading}
           >
-            새로고침
+            {loading ? "불러오는 중..." : "새로고침"}
           </button>
         </div>
       </div>
@@ -735,6 +815,7 @@ export default function PrizesPanel(props: { eventId: string }) {
                   <button
                     className="inline-flex h-9 items-center justify-center rounded-lg bg-zinc-900 px-3 text-sm text-white hover:bg-zinc-800"
                     onClick={() => void startDrawGame(p)}
+                    disabled={drawOpen}
                   >
                     추첨
                   </button>
@@ -779,14 +860,20 @@ export default function PrizesPanel(props: { eventId: string }) {
                           <button
                             className="inline-flex h-8 items-center justify-center rounded-lg border border-zinc-200 px-3 text-xs text-zinc-800 hover:bg-zinc-50"
                             onClick={() => void buildCandidates(p.id)}
+                            disabled={busyKey === `buildCandidates:${p.id}`}
                           >
-                            후보 재생성
+                            {busyKey === `buildCandidates:${p.id}`
+                              ? "생성 중..."
+                              : "후보 재생성"}
                           </button>
                           <button
                             className="inline-flex h-8 items-center justify-center rounded-lg border border-red-200 px-3 text-xs text-red-700 hover:bg-red-50"
                             onClick={() => void clearCandidates(p.id)}
+                            disabled={busyKey === `clearCandidates:${p.id}`}
                           >
-                            후보 초기화
+                            {busyKey === `clearCandidates:${p.id}`
+                              ? "초기화 중..."
+                              : "후보 초기화"}
                           </button>
                         </>
                       ) : null}
@@ -794,8 +881,11 @@ export default function PrizesPanel(props: { eventId: string }) {
                       <button
                         className="inline-flex h-8 items-center justify-center rounded-lg border border-red-200 px-3 text-xs text-red-700 hover:bg-red-50"
                         onClick={() => void deletePrize(p.id)}
+                        disabled={busyKey === `deletePrize:${p.id}`}
                       >
-                        상품 삭제
+                        {busyKey === `deletePrize:${p.id}`
+                          ? "삭제 중..."
+                          : "상품 삭제"}
                       </button>
                     </div>
                   </div>
@@ -829,6 +919,7 @@ export default function PrizesPanel(props: { eventId: string }) {
                               <select
                                 className="h-9 rounded-lg border border-zinc-200 bg-white px-2 text-sm text-zinc-900"
                                 value=""
+                                disabled={busyKey === `moveCandidate:${c.id}`}
                                 onChange={(e) => {
                                   const toPrizeId = e.target.value;
                                   if (!toPrizeId) return;
@@ -855,8 +946,11 @@ export default function PrizesPanel(props: { eventId: string }) {
                               <button
                                 className="inline-flex h-9 items-center justify-center rounded-lg border border-red-200 px-3 text-sm text-red-700 hover:bg-red-50"
                                 onClick={() => void removeCandidate(p.id, c.id)}
+                                disabled={busyKey === `removeCandidate:${c.id}`}
                               >
-                                제외
+                                {busyKey === `removeCandidate:${c.id}`
+                                  ? "제외 중..."
+                                  : "제외"}
                               </button>
                             </div>
                           </li>
