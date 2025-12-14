@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 export default function GlobalError(props: {
   error: Error & { digest?: string };
   reset: () => void;
@@ -29,12 +31,12 @@ export default function GlobalError(props: {
               >
                 다시 시도
               </button>
-              <a
+              <Link
                 className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-200 px-4 text-sm text-zinc-800 hover:bg-zinc-50"
                 href="/events"
               >
                 이벤트로 이동
-              </a>
+              </Link>
             </div>
           </div>
         </main>

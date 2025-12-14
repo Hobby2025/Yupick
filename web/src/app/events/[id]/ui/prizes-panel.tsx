@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type PrizeItem = {
   id: string;
@@ -76,7 +76,7 @@ export default function PrizesPanel(props: { eventId: string }) {
     [newPrizeName]
   );
 
-  async function loadPrizes() {
+  const loadPrizes = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -100,7 +100,7 @@ export default function PrizesPanel(props: { eventId: string }) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [props.eventId]);
 
   function closeDraw() {
     setDrawOpen(false);
@@ -628,7 +628,7 @@ export default function PrizesPanel(props: { eventId: string }) {
 
   useEffect(() => {
     void loadPrizes();
-  }, []);
+  }, [loadPrizes]);
 
   return (
     <section className="rounded-xl border border-zinc-200 bg-white">
@@ -864,7 +864,10 @@ export default function PrizesPanel(props: { eventId: string }) {
 
       {drawOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl">
+          <div
+            key={drawPrizeId ?? "draw"}
+            className="w-full max-w-lg overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl"
+          >
             <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4">
               <div className="min-w-0">
                 <div className="text-xs font-medium text-zinc-600">추첨</div>

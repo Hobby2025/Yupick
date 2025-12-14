@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 type EventItem = {
@@ -18,9 +19,16 @@ export default function EventsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [notice, setNotice] = useState<{
+    tone: "success" | "warning";
+    message: string;
+    eventId?: string;
+  } | null>(null);
+
   const [name, setName] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
   const [creating, setCreating] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const canCreate = useMemo(() => {
     return videoUrl.trim().length > 0 && !creating;
@@ -53,6 +61,8 @@ export default function EventsPage() {
     if (!ok) return;
 
     setError(null);
+    setNotice(null);
+    setDeletingId(id);
 
     try {
       const res = await fetch(`/api/events/${id}`, { method: "DELETE" });
@@ -67,8 +77,11 @@ export default function EventsPage() {
       }
 
       await load();
+      setNotice({ tone: "success", message: "삭제했습니다." });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -77,6 +90,7 @@ export default function EventsPage() {
 
     setCreating(true);
     setError(null);
+    setNotice(null);
 
     try {
       const res = await fetch("/api/events", {
@@ -85,8 +99,37 @@ export default function EventsPage() {
         body: JSON.stringify({ name: name.trim() || undefined, videoUrl }),
       });
 
-      const data = (await res.json()) as { event?: EventItem; error?: string };
-      if (!res.ok) throw new Error(data.error || "Failed to create event");
+      const data = (await res.json().catch(() => null)) as {
+        event?: EventItem;
+        collect?: { fetchedCount: number; createdCount: number } | null;
+        collectError?: string | null;
+        error?: string;
+      } | null;
+      if (!res.ok) {
+        const msg = data?.error || "Failed to create event";
+        throw new Error(msg);
+      }
+
+      const createdEventId = data?.event?.id;
+      if (data?.collectError) {
+        setNotice({
+          tone: "warning",
+          message: `이벤트는 생성되었지만 초기 댓글 수집에 실패했습니다. (나중에 '댓글 수집'에서 다시 실행 가능)`,
+          eventId: createdEventId,
+        });
+      } else if (data?.collect) {
+        setNotice({
+          tone: "success",
+          message: `이벤트를 생성했습니다. (초기 댓글 ${data.collect.createdCount}개 저장)`,
+          eventId: createdEventId,
+        });
+      } else {
+        setNotice({
+          tone: "success",
+          message: "이벤트를 생성했습니다.",
+          eventId: createdEventId,
+        });
+      }
 
       setName("");
       setVideoUrl("");
@@ -112,6 +155,32 @@ export default function EventsPage() {
           </p>
         </div>
 
+        {error ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-6 py-4 text-sm text-red-700">
+            {error}
+          </div>
+        ) : notice ? (
+          <div
+            className={`rounded-xl border px-6 py-4 text-sm ${
+              notice.tone === "warning"
+                ? "border-amber-200 bg-amber-50 text-amber-900"
+                : "border-emerald-200 bg-emerald-50 text-emerald-900"
+            }`}
+          >
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">{notice.message}</div>
+              {notice.eventId ? (
+                <Link
+                  className="text-sm font-medium underline"
+                  href={`/events/${notice.eventId}`}
+                >
+                  바로 열기
+                </Link>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
         <section className="rounded-xl border border-zinc-200 bg-white p-6">
           <div className="mb-4 text-sm font-medium text-zinc-900">
             이벤트 생성
@@ -122,12 +191,22 @@ export default function EventsPage() {
               placeholder="이벤트 이름(선택)"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                void createEvent();
+              }}
             />
             <input
               className="h-10 rounded-lg border border-zinc-200 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:border-zinc-400 sm:col-span-2"
               placeholder="YouTube 영상 URL 또는 Video ID"
               value={videoUrl}
               onChange={(e) => setVideoUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                void createEvent();
+              }}
             />
           </div>
           <div className="mt-4 flex items-center justify-between gap-3">
@@ -151,14 +230,11 @@ export default function EventsPage() {
             <button
               className="text-sm text-zinc-700 hover:text-zinc-900"
               onClick={() => void load()}
+              disabled={loading}
             >
               새로고침
             </button>
           </div>
-
-          {error ? (
-            <div className="px-6 py-4 text-sm text-red-600">{error}</div>
-          ) : null}
 
           {loading ? (
             <div className="px-6 py-6 text-sm text-zinc-600">
@@ -185,17 +261,18 @@ export default function EventsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <a
+                      <Link
                         className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-200 px-3 text-sm text-zinc-800 hover:bg-zinc-50"
                         href={`/events/${ev.id}`}
                       >
                         상세
-                      </a>
+                      </Link>
                       <button
                         className="inline-flex h-9 items-center justify-center rounded-lg border border-red-200 px-3 text-sm text-red-700 hover:bg-red-50"
                         onClick={() => void deleteEvent(ev.id)}
+                        disabled={deletingId === ev.id}
                       >
-                        삭제
+                        {deletingId === ev.id ? "삭제 중..." : "삭제"}
                       </button>
                     </div>
                   </div>

@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-zinc-50">
@@ -20,12 +22,12 @@ export default function Home() {
                 이벤트를 만들고 댓글을 수집해보세요.
               </div>
             </div>
-            <a
+            <Link
               className="inline-flex h-10 items-center justify-center rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800"
               href="/events"
             >
               이벤트 관리로 이동
-            </a>
+            </Link>
           </div>
         </div>
       </main>

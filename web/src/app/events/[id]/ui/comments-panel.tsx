@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type CommentItem = {
   id: string;
@@ -12,11 +12,17 @@ type CommentItem = {
   createdAt: string;
 };
 
-export default function CommentsPanel(props: { eventId: string }) {
+export default function CommentsPanel(props: {
+  eventId: string;
+  refreshKey?: string | null;
+}) {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [comments, setComments] = useState<CommentItem[]>([]);
+
+  const abortRef = useRef<AbortController | null>(null);
+  const requestSeqRef = useRef(0);
 
   const identifiable = useMemo(() => {
     return comments.filter((c) => (c.authorChannelId ?? "").trim().length > 0);
@@ -29,56 +35,70 @@ export default function CommentsPanel(props: { eventId: string }) {
   }, [comments]);
 
   const usersCsvHref = useMemo(() => {
-    const url = new URL(
-      `/api/events/${props.eventId}/comments`,
-      window.location.origin
-    );
-    if (q.trim()) url.searchParams.set("q", q.trim());
-    url.searchParams.set("format", "csv");
-    url.searchParams.set("type", "users");
-    return url.toString();
+    const params = new URLSearchParams();
+    if (q.trim()) params.set("q", q.trim());
+    params.set("format", "csv");
+    params.set("type", "users");
+    const qs = params.toString();
+    return `/api/events/${props.eventId}/comments${qs ? `?${qs}` : ""}`;
   }, [props.eventId, q]);
 
   const commentsCsvHref = useMemo(() => {
-    const url = new URL(
-      `/api/events/${props.eventId}/comments`,
-      window.location.origin
-    );
-    if (q.trim()) url.searchParams.set("q", q.trim());
-    url.searchParams.set("format", "csv");
-    url.searchParams.set("type", "comments");
-    return url.toString();
+    const params = new URLSearchParams();
+    if (q.trim()) params.set("q", q.trim());
+    params.set("format", "csv");
+    params.set("type", "comments");
+    const qs = params.toString();
+    return `/api/events/${props.eventId}/comments${qs ? `?${qs}` : ""}`;
   }, [props.eventId, q]);
 
-  async function load(nextQ: string) {
-    setLoading(true);
-    setError(null);
+  const load = useCallback(
+    async (nextQ: string) => {
+      requestSeqRef.current += 1;
+      const requestSeq = requestSeqRef.current;
 
-    try {
-      const url = new URL(
-        `/api/events/${props.eventId}/comments`,
-        window.location.origin
-      );
-      if (nextQ.trim()) url.searchParams.set("q", nextQ.trim());
+      if (abortRef.current) abortRef.current.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
 
-      const res = await fetch(url.toString(), { cache: "no-store" });
-      const data = (await res.json().catch(() => null)) as
-        | { comments: CommentItem[] }
-        | { error: string }
-        | null;
+      setLoading(true);
+      setError(null);
 
-      if (!res.ok) {
-        const msg = data && "error" in data ? data.error : "Failed to load";
-        throw new Error(msg);
+      try {
+        const params = new URLSearchParams();
+        if (nextQ.trim()) params.set("q", nextQ.trim());
+        const qs = params.toString();
+        const url = `/api/events/${props.eventId}/comments${
+          qs ? `?${qs}` : ""
+        }`;
+
+        const res = await fetch(url, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const data = (await res.json().catch(() => null)) as
+          | { comments: CommentItem[] }
+          | { error: string }
+          | null;
+
+        if (!res.ok) {
+          const msg = data && "error" in data ? data.error : "Failed to load";
+          throw new Error(msg);
+        }
+
+        if (requestSeq !== requestSeqRef.current) return;
+        setComments(data && "comments" in data ? data.comments : []);
+      } catch (e) {
+        if (controller.signal.aborted) return;
+        setError(e instanceof Error ? e.message : "Unknown error");
+      } finally {
+        if (requestSeq === requestSeqRef.current) {
+          setLoading(false);
+        }
       }
-
-      setComments(data && "comments" in data ? data.comments : []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
-    } finally {
-      setLoading(false);
-    }
-  }
+    },
+    [props.eventId]
+  );
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -86,10 +106,12 @@ export default function CommentsPanel(props: { eventId: string }) {
     }, 250);
 
     return () => window.clearTimeout(t);
-  }, [q]);
+  }, [q, props.refreshKey, load]);
 
   useEffect(() => {
-    void load("");
+    return () => {
+      if (abortRef.current) abortRef.current.abort();
+    };
   }, []);
 
   return (

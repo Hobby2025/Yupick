@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 
+import Link from "next/link";
+
 import CollectComments from "./ui/collect-comments";
 import CommentsPanel from "./ui/comments-panel";
 import DeleteEventButton from "./ui/delete-event";
@@ -49,12 +51,12 @@ export default async function EventDetailPage(props: {
               Vercel 로그에서 에러 원인을 확인해주세요. (DB 연결/환경변수/권한
               문제일 수 있습니다.)
             </div>
-            <a
+            <Link
               className="mt-3 inline-block text-sm text-zinc-700 hover:text-zinc-900"
               href="/events"
             >
               목록으로
-            </a>
+            </Link>
           </div>
         </main>
       </div>
@@ -69,12 +71,12 @@ export default async function EventDetailPage(props: {
             <div className="text-sm font-medium text-zinc-900">
               이벤트가 없습니다.
             </div>
-            <a
+            <Link
               className="mt-3 inline-block text-sm text-zinc-700 hover:text-zinc-900"
               href="/events"
             >
               목록으로
-            </a>
+            </Link>
           </div>
         </main>
       </div>
@@ -98,12 +100,12 @@ export default async function EventDetailPage(props: {
           </div>
           <div className="flex items-center gap-3">
             <DeleteEventButton eventId={event.id} />
-            <a
+            <Link
               className="text-sm text-zinc-700 hover:text-zinc-900"
               href="/events"
             >
               목록
-            </a>
+            </Link>
           </div>
         </div>
 
@@ -121,7 +123,10 @@ export default async function EventDetailPage(props: {
 
         <PrizesPanel eventId={event.id} />
 
-        <CommentsPanel eventId={event.id} />
+        <CommentsPanel
+          eventId={event.id}
+          refreshKey={event.lastCollectedAt?.toISOString() ?? null}
+        />
       </main>
     </div>
   );

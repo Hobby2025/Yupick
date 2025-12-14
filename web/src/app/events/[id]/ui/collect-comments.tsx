@@ -1,11 +1,15 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export default function CollectComments(props: { eventId: string }) {
+  const router = useRouter();
+
   const [maxPages, setMaxPages] = useState(10);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [isError, setIsError] = useState(false);
 
   type CollectSuccess = {
     fetchedCount: number;
@@ -18,6 +22,7 @@ export default function CollectComments(props: { eventId: string }) {
   async function run() {
     setLoading(true);
     setMessage(null);
+    setIsError(false);
 
     try {
       const res = await fetch(`/api/events/${props.eventId}/collect`, {
@@ -38,12 +43,13 @@ export default function CollectComments(props: { eventId: string }) {
       }
 
       setMessage(
-        `fetched=${data.fetchedCount}, created=${data.createdCount}, updated=${data.updatedCount}`
+        `수집 완료: fetched=${data.fetchedCount}, created=${data.createdCount}, updated=${data.updatedCount}`
       );
 
-      // server component 데이터 갱신을 위해 새로고침
-      window.location.reload();
+      // server component 데이터 갱신
+      router.refresh();
     } catch (e) {
+      setIsError(true);
       setMessage(e instanceof Error ? e.message : "Unknown error");
     } finally {
       setLoading(false);
@@ -58,7 +64,10 @@ export default function CollectComments(props: { eventId: string }) {
         min={1}
         max={25}
         value={maxPages}
-        onChange={(e) => setMaxPages(Number(e.target.value))}
+        onChange={(e) => {
+          const next = Number(e.target.value);
+          setMaxPages(Number.isFinite(next) && next > 0 ? next : 1);
+        }}
       />
       <button
         className="inline-flex h-10 items-center justify-center rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-zinc-300"
@@ -67,7 +76,13 @@ export default function CollectComments(props: { eventId: string }) {
       >
         {loading ? "수집 중..." : "수집 실행"}
       </button>
-      {message ? <div className="text-xs text-zinc-600">{message}</div> : null}
+      {message ? (
+        <div
+          className={isError ? "text-xs text-red-600" : "text-xs text-zinc-600"}
+        >
+          {message}
+        </div>
+      ) : null}
     </div>
   );
 }

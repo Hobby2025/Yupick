@@ -90,50 +90,75 @@ export async function POST(req: Request) {
       },
     });
 
-    const comments = await fetchTopLevelComments({
-      videoId,
-      apiKey,
-      maxPages: collectMaxPages,
-    });
+    let collect: { fetchedCount: number; createdCount: number } | null = null;
+    let collectError: string | null = null;
 
-    const insertResult = await prisma.comment.createMany({
-      data: comments.map((c) => ({
-        eventId: event.id,
-        commentId: c.commentId,
-        authorName: c.authorName ?? null,
-        authorChannelId: c.authorChannelId ?? null,
-        text: c.text,
-        publishedAt: c.publishedAt ?? null,
-      })),
-      skipDuplicates: true,
-    });
+    try {
+      const comments = await fetchTopLevelComments({
+        videoId,
+        apiKey,
+        maxPages: collectMaxPages,
+      });
 
-    await prisma.event.update({
-      where: { id: event.id },
-      data: { lastCollectedAt: new Date() },
-    });
+      const insertResult = await prisma.comment.createMany({
+        data: comments.map((c) => ({
+          eventId: event.id,
+          commentId: c.commentId,
+          authorName: c.authorName ?? null,
+          authorChannelId: c.authorChannelId ?? null,
+          text: c.text,
+          publishedAt: c.publishedAt ?? null,
+        })),
+        skipDuplicates: true,
+      });
 
-    const updatedEvent = await prisma.event.findUnique({
-      where: { id: event.id },
-      select: {
-        id: true,
-        name: true,
-        videoUrl: true,
-        videoId: true,
-        lastCollectedAt: true,
-        createdAt: true,
-        updatedAt: true,
-        _count: { select: { comments: true } },
-      },
-    });
+      await prisma.event.update({
+        where: { id: event.id },
+        data: { lastCollectedAt: new Date() },
+      });
+
+      collect = {
+        fetchedCount: comments.length,
+        createdCount: insertResult.count,
+      };
+    } catch (e) {
+      console.error(
+        "POST /api/events comment collect failed",
+        { id: event.id },
+        e
+      );
+      collectError = e instanceof Error ? e.message : "Unknown error";
+    }
+
+    let updatedEvent = event;
+    try {
+      const refreshed = await prisma.event.findUnique({
+        where: { id: event.id },
+        select: {
+          id: true,
+          name: true,
+          videoUrl: true,
+          videoId: true,
+          lastCollectedAt: true,
+          createdAt: true,
+          updatedAt: true,
+          _count: { select: { comments: true } },
+        },
+      });
+      if (refreshed) updatedEvent = refreshed;
+    } catch (e) {
+      console.error(
+        "POST /api/events refresh event failed",
+        { id: event.id },
+        e
+      );
+    }
 
     return NextResponse.json(
       {
-        event: updatedEvent ?? event,
-        collect: {
-          fetchedCount: comments.length,
-          createdCount: insertResult.count,
-        },
+        event: updatedEvent,
+        collect,
+        collectError,
       },
       { status: 201 }
     );
